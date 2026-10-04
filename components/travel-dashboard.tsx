@@ -129,7 +129,7 @@ export function TravelDashboard({ feed }: { feed: TravelFeed }) {
       <header className="hero">
         <div className="hero-inner">
           <p className="eyebrow">ShipHero customer success</p>
-          <h1>Upcoming onsite travel</h1>
+          <h1>Central Ops Travel</h1>
           <p className="hero-copy">Plan customer visits and keep the team aligned.</p>
           <div className={feed.source === "live" ? "sync-pill" : "sync-pill pending"} aria-label="Calendar refresh status">
             <span aria-hidden="true" />

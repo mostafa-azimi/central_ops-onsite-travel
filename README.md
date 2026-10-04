@@ -1,4 +1,4 @@
-# CS Onsite Travel
+# Central Ops Travel
 
 A lightweight public Next.js dashboard for upcoming customer onsite travel.
 
