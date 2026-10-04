@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { validateVisitSubmission } from "@/lib/submissions";
 import { getAdminSession } from "@/lib/admin-auth";
+import { ApprovalError, approvalConnectionsConfigured, approveVisitRequest } from "@/lib/approve-request";
+import { createVisitRequest, databaseConfigured } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -45,13 +47,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: parsed.message }, { status: 400 });
   }
 
-  // Never return a mock success. This endpoint remains fail-closed until both
-  // narrowly scoped external connections and deterministic CASH mapping exist.
-  return NextResponse.json(
-    {
-      message:
-        "Google Calendar and HubSpot connections are not configured. No records were created.",
-    },
-    { status: 503 },
-  );
+  if (!databaseConfigured()) {
+    return NextResponse.json({ message: "Request storage is not configured. No records were created." }, { status: 503 });
+  }
+  if (!approvalConnectionsConfigured()) {
+    return NextResponse.json(
+      { message: "Calendar and HubSpot write connections are not configured. No records were created." },
+      { status: 503 },
+    );
+  }
+
+  try {
+    const saved = await createVisitRequest({
+      submissionId: parsed.value.submissionId,
+      tripType: parsed.value.tripType,
+      cashUrl: parsed.value.cashUrl,
+      cashAccountId: parsed.value.cashAccountId,
+      city: parsed.value.city,
+      state: parsed.value.state,
+      start: parsed.value.start,
+      end: parsed.value.end,
+    });
+    const approved = await approveVisitRequest(saved.id, parsed.value.traveler, admin.email);
+    return NextResponse.json({ request: approved }, { status: 201 });
+  } catch (error) {
+    if (error instanceof Error && error.message === "IDEMPOTENCY_CONFLICT") {
+      return NextResponse.json({ message: "That submission ID was already used for different visit data." }, { status: 409 });
+    }
+    if (error instanceof ApprovalError) {
+      const status = error.code === "not_configured" ? 503 : error.code === "conflict" ? 409 : 502;
+      return NextResponse.json({ message: error.message }, { status });
+    }
+    throw error;
+  }
 }

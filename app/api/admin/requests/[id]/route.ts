@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 import { databaseConfigured, denyVisitRequest } from "@/lib/db";
 import { ASSIGNEES } from "@/lib/types";
+import { ApprovalError, approveVisitRequest } from "@/lib/approve-request";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getAdminSession();
@@ -20,10 +21,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!ASSIGNEES.includes(body.traveler as (typeof ASSIGNEES)[number])) {
       return NextResponse.json({ message: "Select an approved traveler." }, { status: 400 });
     }
-    return NextResponse.json(
-      { message: "Calendar and HubSpot write connections must be configured before approval." },
-      { status: 503 },
-    );
+    try {
+      const approved = await approveVisitRequest(
+        id,
+        body.traveler as (typeof ASSIGNEES)[number],
+        admin.email,
+      );
+      return NextResponse.json({ request: approved });
+    } catch (error) {
+      if (error instanceof ApprovalError) {
+        const status = error.code === "not_configured" ? 503 : error.code === "conflict" ? 409 : 502;
+        return NextResponse.json({ message: error.message }, { status });
+      }
+      throw error;
+    }
   }
   return NextResponse.json({ message: "Select approve or deny." }, { status: 400 });
 }

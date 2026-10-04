@@ -149,6 +149,19 @@ function snapshotFeed(now: Date): TravelFeed {
 
 export async function getTravelFeed(now = new Date()): Promise<TravelFeed> {
   try {
+    const { fetchGoogleTravelEvents, googleCalendarConfigured } = await import("@/lib/google-calendar");
+    if (googleCalendarConfigured()) {
+      return {
+        events: await fetchGoogleTravelEvents(now),
+        refreshedAt: new Date().toISOString(),
+        source: "live",
+      };
+    }
+  } catch (error) {
+    console.error("Google Calendar refresh failed", error instanceof Error ? error.message : "Unknown error");
+  }
+
+  try {
     const calendarUrl = process.env.CALENDAR_ICS_URL ?? DEFAULT_CALENDAR_ICS_URL;
     const response = await fetch(calendarUrl, {
       next: { revalidate: 900 },

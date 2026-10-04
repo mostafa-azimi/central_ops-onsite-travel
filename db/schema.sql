@@ -14,8 +14,12 @@ CREATE TABLE IF NOT EXISTS visit_requests (
   decided_at timestamptz,
   decided_by_email text,
   calendar_event_id text,
+  calendar_event_url text,
   hubspot_meeting_id text,
-  sync_status text NOT NULL DEFAULT 'not_started' CHECK (sync_status IN ('not_started', 'calendar_created', 'complete', 'failed')),
+  hubspot_company_id text,
+  sync_status text NOT NULL DEFAULT 'not_started' CHECK (sync_status IN ('not_started', 'syncing_calendar', 'syncing_hubspot', 'complete', 'failed')),
+  sync_started_at timestamptz,
+  sync_attempts integer NOT NULL DEFAULT 0,
   sync_error text,
   CHECK (end_date_inclusive >= start_date),
   CHECK ((status = 'approved' AND assigned_traveler IS NOT NULL) OR status <> 'approved')

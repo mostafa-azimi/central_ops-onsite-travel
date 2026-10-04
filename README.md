@@ -12,7 +12,7 @@ A lightweight public Next.js dashboard for upcoming customer onsite travel.
 
 ## Calendar refresh
 
-The server reads `CALENDAR_ICS_URL` when a private, read-only iCal address is configured in the deployment environment. The credential stays server-side. Successful reads are cached for 15 minutes. If no private feed is configured or the feed is unavailable, the page falls back to the last verified sanitized snapshot in `data/snapshot.json`.
+The server prefers the authenticated Google Calendar API when `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, and `GOOGLE_CALENDAR_REFRESH_TOKEN` are configured. It requests expanded event instances from the one hard-coded CS Onsite calendar, filters the four-person allowlist on the server, and caches successful reads for 15 minutes. A private, read-only iCal address in `CALENDAR_ICS_URL` is the optional secondary source. If neither live source is available, the page falls back to the last verified sanitized snapshot in `data/snapshot.json`.
 
 ## Request and approval workflow
 
@@ -22,7 +22,16 @@ Traveler assignment, approval, denial, and direct scheduling live on `/admin`. G
 
 Google administrator sign-in requires a separate web OAuth client with redirect URI `https://cs-onsite-travel.vercel.app/api/auth/google/callback` and environment variables `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Additional administrators can be added explicitly through `ADMIN_ALLOWED_EMAILS`. Until OAuth and durable storage are configured, the public request and administrator actions fail closed and never return mock success.
 
-The completed approval path must create exactly one all-day Calendar event without invitations and one HubSpot meeting associated to a deterministically resolved company. CASH account IDs map only through HubSpot company string property `account_id`; the lookup must return exactly one company and its `shiphero_cash__account_url` must match the canonical submitted URL. Calendar end dates are stored end-exclusive. Pending requests, decision audit, external IDs, and idempotency keys must be persisted before enabling writes so a partial failure can be retried without duplicates.
+The approval path creates one all-day Calendar event without invitations and one HubSpot meeting associated to a deterministically resolved company. CASH account IDs map only through HubSpot company string property `account_id`; the lookup must return exactly one company and its `shiphero_cash__account_url` must match the canonical submitted URL. Calendar end dates are stored end-exclusive. A deterministic Google event ID and unique HubSpot meeting title make partial retries recoverable. The database persists synchronization state, external IDs, errors, decisions, and an audit record before an approval is marked complete.
+
+Required runtime configuration:
+
+- `DATABASE_URL` for the dedicated Postgres database initialized with `db/schema.sql`
+- `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, and `GOOGLE_CALENDAR_REFRESH_TOKEN` for server-side Calendar event read/write
+- `HUBSPOT_ACCESS_TOKEN` with company read and meeting-create permissions
+- `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` for administrator sign-in
+
+All credentials remain server-side. The application fails closed when any required connection is absent and never returns a mock write success.
 
 ## Local development
 
