@@ -6,7 +6,7 @@ const valid = {
   submissionId: "4f75767a-905d-4b80-b185-f942d659b25f",
   tripType: "Onboarding",
   traveler: "Mike Azimi",
-  cashUrl: "https://cash.example.test/customer/123",
+  cashUrl: "https://cash.shiphero.com/client/100000",
   city: "Atlanta",
   state: "ga",
   start: "2026-10-05",
@@ -18,17 +18,37 @@ test("converts inclusive visit end to Calendar end-exclusive date", () => {
   assert.equal(inclusiveEndToExclusive("2026-12-31"), "2027-01-01");
 });
 
-test("accepts only the fixed travelers and exact configured CASH host", () => {
-  const result = validateVisitSubmission(valid, "cash.example.test");
+test("accepts only the fixed travelers and exact CASH account path", () => {
+  const result = validateVisitSubmission(valid);
   assert.equal(result.ok, true);
-  if (result.ok) assert.equal(result.value.state, "GA");
+  if (result.ok) {
+    assert.equal(result.value.state, "GA");
+    assert.equal(result.value.cashAccountId, "100000");
+    assert.equal(result.value.cashUrl, "https://cash.shiphero.com/client/100000");
+  }
 
-  assert.equal(validateVisitSubmission({ ...valid, traveler: "Joey Buckley" }, "cash.example.test").ok, false);
-  assert.equal(validateVisitSubmission({ ...valid, cashUrl: "https://evil.test/customer/123" }, "cash.example.test").ok, false);
+  assert.equal(validateVisitSubmission({ ...valid, traveler: "Joey Buckley" }).ok, false);
+  assert.equal(validateVisitSubmission({ ...valid, cashUrl: "https://evil.test/client/100000" }).ok, false);
 });
 
-test("fails closed while the verified CASH host is unknown", () => {
-  const result = validateVisitSubmission(valid);
-  assert.equal(result.ok, false);
-  if (!result.ok) assert.equal(result.status, 503);
+test("allows one trailing slash but rejects arbitrary CASH URL variants", () => {
+  const trailingSlash = validateVisitSubmission({
+    ...valid,
+    cashUrl: "https://cash.shiphero.com/client/100000/",
+  });
+  assert.equal(trailingSlash.ok, true);
+  if (trailingSlash.ok) assert.equal(trailingSlash.value.cashUrl, valid.cashUrl);
+
+  for (const cashUrl of [
+    "http://cash.shiphero.com/client/100000",
+    "https://cash.shiphero.com/client/not-a-number",
+    "https://cash.shiphero.com/client/100000/details",
+    "https://cash.shiphero.com/client/100000?next=https://evil.test",
+    "https://cash.shiphero.com/client/100000#fragment",
+    "https://cash.shiphero.com.evil.test/client/100000",
+    "https://user@cash.shiphero.com/client/100000",
+    "https://cash.shiphero.com:8443/client/100000",
+  ]) {
+    assert.equal(validateVisitSubmission({ ...valid, cashUrl }).ok, false, cashUrl);
+  }
 });

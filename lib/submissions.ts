@@ -8,6 +8,7 @@ export type VisitSubmission = {
   tripType: TripType;
   traveler: Assignee;
   cashUrl: string;
+  cashAccountId: string;
   city: string;
   state: string;
   start: string;
@@ -29,7 +30,7 @@ export function inclusiveEndToExclusive(value: string) {
   return end.toISOString().slice(0, 10);
 }
 
-export function validateVisitSubmission(input: unknown, cashAllowedHost?: string) {
+export function validateVisitSubmission(input: unknown) {
   if (!input || typeof input !== "object") return { ok: false as const, message: "Invalid request body." };
   const value = input as Record<string, unknown>;
   const submissionId = String(value.submissionId ?? "");
@@ -47,16 +48,15 @@ export function validateVisitSubmission(input: unknown, cashAllowedHost?: string
   if (!city || city.length > 80) return { ok: false as const, message: "Enter a valid city." };
   if (!/^[A-Z]{2}$/.test(state)) return { ok: false as const, message: "Enter a two-letter state code." };
   if (!isDateOnly(start) || !isDateOnly(end) || end < start) return { ok: false as const, message: "Enter a valid inclusive date range." };
-  if (!cashAllowedHost) return { ok: false as const, status: 503, message: "CASH host verification is pending. No records were created." };
-
-  try {
-    const url = new URL(cashUrl);
-    if (url.protocol !== "https:" || url.hostname !== cashAllowedHost) {
-      return { ok: false as const, message: "Use a verified CASH customer link." };
-    }
-  } catch {
-    return { ok: false as const, message: "Use a valid CASH customer link." };
+  const cashMatch = /^https:\/\/cash\.shiphero\.com\/client\/([1-9]\d*)\/?$/.exec(cashUrl);
+  if (!cashMatch) {
+    return {
+      ok: false as const,
+      message: "Use a CASH link in the format https://cash.shiphero.com/client/123456.",
+    };
   }
+  const cashAccountId = cashMatch[1];
+  const canonicalCashUrl = `https://cash.shiphero.com/client/${cashAccountId}`;
 
   return {
     ok: true as const,
@@ -64,7 +64,8 @@ export function validateVisitSubmission(input: unknown, cashAllowedHost?: string
       submissionId,
       tripType: tripType as TripType,
       traveler: traveler as Assignee,
-      cashUrl,
+      cashUrl: canonicalCashUrl,
+      cashAccountId,
       city,
       state,
       start,

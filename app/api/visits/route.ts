@@ -35,9 +35,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Invalid JSON body." }, { status: 400 });
   }
 
-  const parsed = validateVisitSubmission(body, process.env.CASH_ALLOWED_HOST);
+  const parsed = validateVisitSubmission(body);
   if (!parsed.ok) {
-    return NextResponse.json({ message: parsed.message }, { status: parsed.status ?? 400 });
+    return NextResponse.json({ message: parsed.message }, { status: 400 });
   }
 
   // Never return a mock success. This endpoint remains fail-closed until both
