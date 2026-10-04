@@ -141,6 +141,11 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .admin-allowlist { font-size: .82rem; }
 .admin-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .admin-card a:not(.btn-primary) { color: var(--blue); font-weight: 750; }
+.approval-list { display: grid; gap: 12px; margin-top: 20px; }
+.approval-card { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; padding: 18px; border: 1px solid var(--blue-100); border-radius: 6px; }
+.approval-card p { margin: 6px 0; color: var(--body); }
+.approval-actions { display: flex; align-items: center; gap: 8px; }
+.approval-actions select { min-width: 180px; height: 42px; padding: 0 10px; border: 1px solid var(--gray); border-radius: 6px; background: var(--white); }
 footer { padding: 0 24px 36px; color: var(--body); font-size: .78rem; }
 
 @media (max-width: 760px) {
@@ -153,6 +158,8 @@ footer { padding: 0 24px 36px; color: var(--body); font-size: .78rem; }
   .setup-note, .form-actions { align-items: flex-start; flex-direction: column; }
   .admin-card { padding: 24px 20px; }
   .admin-header { flex-direction: column; }
+  .approval-card { grid-template-columns: 1fr; }
+  .approval-actions { align-items: stretch; flex-direction: column; }
   .stats { grid-template-columns: 1fr 1fr; }
   .stat-card.wide { grid-column: 1 / -1; }
   .list-heading { align-items: flex-start; flex-direction: column; margin-top: 34px; }

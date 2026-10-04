@@ -10,6 +10,7 @@
     "test": "node --import tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
     "jose": "^6.1.0",
     "next": "^15.5.0",
     "node-ical": "^0.22.1",
