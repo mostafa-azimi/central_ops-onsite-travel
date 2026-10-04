@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { validateVisitSubmission } from "@/lib/submissions";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,10 @@ function rateLimited(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const admin = await getAdminSession();
+  if (!admin) {
+    return NextResponse.json({ message: "Administrator sign-in is required." }, { status: 401 });
+  }
   if (rateLimited(request)) {
     return NextResponse.json({ message: "Too many attempts. Try again later." }, { status: 429 });
   }

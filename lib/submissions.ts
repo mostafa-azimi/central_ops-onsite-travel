@@ -15,6 +15,8 @@ export type VisitSubmission = {
   end: string;
 };
 
+export type VisitRequestSubmission = Omit<VisitSubmission, "traveler">;
+
 function isDateOnly(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split("-").map(Number);
@@ -72,4 +74,26 @@ export function validateVisitSubmission(input: unknown) {
       end,
     } satisfies VisitSubmission,
   };
+}
+
+export function validateVisitRequest(input: unknown) {
+  if (!input || typeof input !== "object") return { ok: false as const, message: "Invalid request body." };
+  const source = input as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(source, "traveler")) {
+    return { ok: false as const, message: "Travelers can only be assigned by an approved administrator." };
+  }
+
+  const parsed = validateVisitSubmission({ ...source, traveler: "Mike Azimi" });
+  if (!parsed.ok) return parsed;
+  const request: VisitRequestSubmission = {
+    submissionId: parsed.value.submissionId,
+    tripType: parsed.value.tripType,
+    cashUrl: parsed.value.cashUrl,
+    cashAccountId: parsed.value.cashAccountId,
+    city: parsed.value.city,
+    state: parsed.value.state,
+    start: parsed.value.start,
+    end: parsed.value.end,
+  };
+  return { ok: true as const, value: request };
 }

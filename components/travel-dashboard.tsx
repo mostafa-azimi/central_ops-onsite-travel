@@ -88,13 +88,12 @@ export function TravelDashboard({ feed }: { feed: TravelFeed }) {
 
   async function submitVisit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSubmitStatus({ kind: "working", message: "Creating Calendar and HubSpot records…" });
+    setSubmitStatus({ kind: "working", message: "Submitting request…" });
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const payload = {
       submissionId: crypto.randomUUID(),
       tripType: String(form.get("tripType")),
-      traveler: String(form.get("traveler")),
       cashUrl: String(form.get("cashUrl")),
       city: String(form.get("city")).trim(),
       state: String(form.get("state")).trim().toUpperCase(),
@@ -103,23 +102,23 @@ export function TravelDashboard({ feed }: { feed: TravelFeed }) {
     };
 
     try {
-      const response = await fetch("/api/visits", {
+      const response = await fetch("/api/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const result = (await response.json()) as { message?: string; calendarEventId?: string; hubspotMeetingId?: string };
-      if (!response.ok) throw new Error(result.message || "The visit could not be created.");
+      const result = (await response.json()) as { message?: string; requestId?: string };
+      if (!response.ok) throw new Error(result.message || "The request could not be submitted.");
       setSubmitStatus({
         kind: "success",
-        message: `Created Calendar event ${result.calendarEventId} and HubSpot meeting ${result.hubspotMeetingId}.`,
+        message: `Request ${result.requestId} was submitted for approval.`,
       });
       formElement.reset();
       setFormStart("");
     } catch (error) {
       setSubmitStatus({
         kind: "error",
-        message: error instanceof Error ? error.message : "The visit could not be created.",
+        message: error instanceof Error ? error.message : "The request could not be submitted.",
       });
     }
   }
@@ -200,22 +199,21 @@ export function TravelDashboard({ feed }: { feed: TravelFeed }) {
         ) : (
           <section className="workflow-panel" aria-labelledby="submit-heading">
             <div className="panel-heading">
-              <p className="eyebrow">Automated workflow</p>
-              <h2 id="submit-heading">Submit a customer visit</h2>
-              <p>One submission creates an all-day Google Calendar event and an associated HubSpot meeting.</p>
+              <p className="eyebrow">Request workflow</p>
+              <h2 id="submit-heading">Request a customer visit</h2>
+              <p>An approved administrator reviews the request, assigns the traveler, and then creates the Calendar and HubSpot records.</p>
             </div>
-            <div className="setup-note"><strong>Connection setup in progress</strong><span>The form validates now. It will not report success until both external records exist.</span></div>
+            <div className="setup-note"><strong>Request storage setup in progress</strong><span>The form validates now but will not report success until the request is saved durably.</span></div>
             <form className="visit-form" onSubmit={submitVisit}>
               <label><span>Visit type</span><select name="tripType" required defaultValue=""><option value="" disabled>Select a visit type</option><option>Onboarding</option><option>Central Ops onsite</option></select></label>
-              <label><span>Traveler</span><select name="traveler" required defaultValue=""><option value="" disabled>Select a traveler</option>{ASSIGNEES.map((name) => <option key={name}>{name}</option>)}</select></label>
               <label className="full"><span>Customer link in CASH</span><input name="cashUrl" type="url" required placeholder="Paste the customer CASH link" /></label>
               <label><span>City</span><input name="city" required autoComplete="address-level2" /></label>
               <label><span>State</span><input name="state" required minLength={2} maxLength={2} placeholder="GA" autoComplete="address-level1" /></label>
               <label><span>Start date</span><input name="start" type="date" required onChange={(event) => setFormStart(event.target.value)} /></label>
               <label><span>End date</span><input name="end" type="date" required min={formStart || undefined} /></label>
               <div className="form-actions full">
-                <button className="btn-primary" type="submit" disabled={submitStatus.kind === "working"}>{submitStatus.kind === "working" ? "Creating visit…" : "Create visit"}</button>
-                <p>Dates are inclusive. Calendar invitations are not sent.</p>
+                <button className="btn-primary" type="submit" disabled={submitStatus.kind === "working"}>{submitStatus.kind === "working" ? "Submitting request…" : "Submit request"}</button>
+                <p>Dates are inclusive. Traveler assignment is restricted to approved administrators.</p>
               </div>
             </form>
             {submitStatus.kind !== "idle" && <div className={`submit-status ${submitStatus.kind}`} role="status">{submitStatus.message}</div>}

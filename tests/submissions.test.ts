@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inclusiveEndToExclusive, validateVisitSubmission } from "@/lib/submissions";
+import { inclusiveEndToExclusive, validateVisitRequest, validateVisitSubmission } from "@/lib/submissions";
 
 const valid = {
   submissionId: "4f75767a-905d-4b80-b185-f942d659b25f",
@@ -51,4 +51,13 @@ test("allows one trailing slash but rejects arbitrary CASH URL variants", () => 
   ]) {
     assert.equal(validateVisitSubmission({ ...valid, cashUrl }).ok, false, cashUrl);
   }
+});
+
+test("public requests cannot assign a traveler", () => {
+  const request: Record<string, unknown> = { ...valid };
+  delete request.traveler;
+  assert.equal(validateVisitRequest(request).ok, true);
+  const assigned = validateVisitRequest(valid);
+  assert.equal(assigned.ok, false);
+  if (!assigned.ok) assert.match(assigned.message, /administrator/i);
 });
