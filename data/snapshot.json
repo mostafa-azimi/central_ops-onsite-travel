@@ -1,0 +1,32 @@
+{
+  "capturedAt": "2026-10-03T23:40:16.000Z",
+  "events": [
+    {
+      "id": "03obs3d8qngd5i3of6djc2qt96",
+      "assignee": "Sam Armenia",
+      "customer": "Velocity",
+      "location": "",
+      "start": "2026-10-06",
+      "end": "2026-10-08",
+      "allDay": true
+    },
+    {
+      "id": "4rt0e7scpfjhtdjt0dtmftvfmu",
+      "assignee": "Sam Armenia",
+      "customer": "Fulfillmate",
+      "location": "San Diego",
+      "start": "2026-10-12",
+      "end": "2026-10-15",
+      "allDay": true
+    },
+    {
+      "id": "2ssqbddm4marckokpk8p5c0jjg",
+      "assignee": "Sam Armenia",
+      "customer": "Born United",
+      "location": "North Charleston",
+      "start": "2026-10-26",
+      "end": "2026-10-29",
+      "allDay": true
+    }
+  ]
+}
