@@ -6,6 +6,8 @@ test("only the four allowlisted people can match", () => {
   assert.equal(allowedAssignee("Sam Armenia - Velocity"), "Sam Armenia");
   assert.equal(allowedAssignee("Joey - Customer visit"), null);
   assert.equal(allowedAssignee("Samantha Armenia - Customer visit"), null);
+  assert.equal(allowedAssignee("Sam - Customer visit"), "Sam Armenia");
+  assert.equal(allowedAssignee("Customer visit with Sam"), null);
 });
 
 test("the public DTO removes names and unsafe locations", () => {
@@ -13,6 +15,7 @@ test("the public DTO removes names and unsafe locations", () => {
     publicFields("Sam Armenia - Fulfillmate (San Diego)", "Sam Armenia", "https://meet.google.com/secret"),
     { customer: "Fulfillmate", location: "San Diego" },
   );
+  assert.equal(publicFields("Sam - Acme", "Sam Armenia", "Atlanta, GA").customer, "Acme");
 });
 
 test("parses recurrence, exclusion, cancellation, and all-day end-exclusive dates", () => {

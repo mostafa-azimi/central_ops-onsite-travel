@@ -14,10 +14,12 @@ function canonical(value: string) {
 }
 
 export function allowedAssignee(summary: string): Assignee | null {
-  const normalized = ` ${canonical(summary)} `;
-  return (
-    ASSIGNEES.find((name) => normalized.includes(` ${canonical(name)} `)) ?? null
-  );
+  const value = canonical(summary);
+  const normalized = ` ${value} `;
+  const fullName = ASSIGNEES.find((name) => normalized.includes(` ${canonical(name)} `));
+  if (fullName) return fullName;
+  const firstToken = value.split(" ")[0];
+  return ASSIGNEES.find((name) => canonical(name).split(" ")[0] === firstToken) ?? null;
 }
 
 function cleanText(value: unknown, max = 100) {
@@ -40,8 +42,10 @@ function safeLocation(value: unknown) {
 }
 
 export function publicFields(summary: string, assignee: Assignee, rawLocation: unknown) {
+  const firstName = assignee.split(" ")[0];
   let customer = cleanText(summary, 120)
     .replace(new RegExp(assignee.replace(" ", "\\s+"), "i"), "")
+    .replace(new RegExp(`^${firstName}\\b(?=\\s*[:|/,\\-])`, "i"), "")
     .replace(/^[\s:|/,-]+|[\s:|/,-]+$/g, "")
     .trim();
 
