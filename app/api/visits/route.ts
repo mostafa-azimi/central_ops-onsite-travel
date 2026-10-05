@@ -62,6 +62,7 @@ export async function POST(request: Request) {
     const saved = await createVisitRequest({
       submissionId: parsed.value.submissionId,
       tripType: parsed.value.tripType,
+      accountName: parsed.value.accountName,
       cashUrl: parsed.value.cashUrl,
       cashAccountId: parsed.value.cashAccountId,
       city: parsed.value.city,

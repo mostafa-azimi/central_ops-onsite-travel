@@ -100,6 +100,7 @@ export function TravelDashboard({
     const payload = {
       submissionId: crypto.randomUUID(),
       tripType: String(form.get("tripType")),
+      accountName: String(form.get("accountName")).trim(),
       cashUrl: String(form.get("cashUrl")),
       city: String(form.get("city")).trim(),
       state: String(form.get("state")).trim().toUpperCase(),
@@ -214,6 +215,7 @@ export function TravelDashboard({
             )}
             <form className="visit-form" onSubmit={submitVisit}>
               <label><span>Visit type</span><select name="tripType" required defaultValue=""><option value="" disabled>Select a visit type</option><option>Onboarding</option><option>Central Ops onsite</option></select></label>
+              <label className="full"><span>Account name</span><input name="accountName" required maxLength={120} placeholder="Customer account name" autoComplete="organization" /></label>
               <label className="full"><span>Customer link in CASH</span><input name="cashUrl" type="url" required placeholder="Paste the customer CASH link" /></label>
               <label><span>City</span><input name="city" required autoComplete="address-level2" /></label>
               <label><span>State</span><input name="state" required minLength={2} maxLength={2} placeholder="GA" autoComplete="address-level1" /></label>

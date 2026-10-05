@@ -145,7 +145,7 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .approval-card { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; padding: 18px; border: 1px solid var(--blue-100); border-radius: 6px; }
 .approval-card p { margin: 6px 0; color: var(--body); }
 .approval-actions { display: flex; align-items: center; gap: 8px; }
-.approval-actions select { min-width: 180px; height: 42px; padding: 0 10px; border: 1px solid var(--gray); border-radius: 6px; background: var(--white); }
+.approval-actions select, .approval-actions input { min-width: 180px; height: 42px; padding: 0 10px; border: 1px solid var(--gray); border-radius: 6px; background: var(--white); }
 footer { padding: 0 24px 36px; color: var(--body); font-size: .78rem; }
 
 @media (max-width: 760px) {

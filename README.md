@@ -16,7 +16,7 @@ The server prefers the authenticated Google Calendar API when `GOOGLE_CALENDAR_C
 
 ## Request and approval workflow
 
-The public form submits a visit request and cannot choose a traveler. The API rejects any public request payload containing a traveler field. It accepts only exact HTTPS CASH links shaped like `https://cash.shiphero.com/client/{numeric account ID}`. It canonicalizes an optional trailing slash, never fetches the submitted URL, and rejects query strings, fragments, credentials, ports, extra paths, and non-numeric IDs.
+The public form submits an account name and visit request but cannot choose a traveler. The API rejects any public request payload containing a traveler field. It accepts only exact HTTPS CASH links shaped like `https://cash.shiphero.com/client/{numeric account ID}`. It canonicalizes an optional trailing slash, never fetches the submitted URL, and rejects query strings, fragments, credentials, ports, extra paths, and non-numeric IDs. The account name is used in the Calendar event title, while the validated CASH URL is included in the private Calendar description.
 
 Traveler assignment, approval, denial, and direct scheduling live on `/admin`. Google OpenID Connect is verified server-side against Google's signing keys, and the verified email must be in the exact server-side allowlist. The initial allowed administrator is `mike.azimi@shiphero.com`; all other accounts are denied by default. The existing direct-schedule endpoint also requires a verified administrator session.
 

@@ -37,6 +37,9 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
 
   const current = await getVisitRequest(id);
   if (current?.status === "approved" && current.assignedTraveler === traveler) return current;
+  if (!current?.accountName) {
+    throw new ApprovalError("Enter the account name before approving this request.", "conflict");
+  }
 
   const claimed = await claimVisitRequestApproval(id, traveler);
   if (!claimed) {
@@ -50,7 +53,8 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
         requestId: claimed.id,
         traveler,
         tripType: claimed.tripType,
-        companyName: `CASH account ${claimed.cashAccountId}`,
+        companyName: claimed.accountName,
+        cashUrl: claimed.cashUrl,
         city: claimed.city,
         state: claimed.state,
         start: claimed.start,
@@ -72,7 +76,8 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
       requestId: withCalendar.id,
       traveler,
       tripType: withCalendar.tripType,
-      companyName: company.name,
+      companyName: withCalendar.accountName,
+      cashUrl: withCalendar.cashUrl,
       city: withCalendar.city,
       state: withCalendar.state,
       start: withCalendar.start,

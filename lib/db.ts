@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { VisitRequestSubmission } from "@/lib/submissions";
+import { normalizeAccountName, type VisitRequestSubmission } from "@/lib/submissions";
 
 const SHEETS_API = "https://sheets.googleapis.com/v4";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REQUESTS_TAB = "Requests";
 const AUDIT_TAB = "Audit";
-const REQUEST_COLUMN_COUNT = 24;
+const REQUEST_COLUMN_COUNT = 25;
 type Fetch = typeof fetch;
 
 export const REQUEST_HEADERS = [
@@ -13,7 +13,7 @@ export const REQUEST_HEADERS = [
   "city", "state", "start_date", "end_date_inclusive", "assigned_traveler", "decided_at",
   "decided_by_email", "calendar_event_id", "calendar_event_url", "hubspot_meeting_id",
   "hubspot_company_id", "sync_status", "sync_started_at", "sync_attempts", "sync_error",
-  "payload_fingerprint", "claim_token",
+  "payload_fingerprint", "claim_token", "account_name",
 ] as const;
 
 export const AUDIT_HEADERS = [
@@ -108,6 +108,7 @@ function cell(values: string[], index: number) {
 export function requestFingerprint(input: VisitRequestSubmission) {
   return createHash("sha256").update(JSON.stringify({
     tripType: input.tripType,
+    accountName: input.accountName,
     cashUrl: input.cashUrl,
     cashAccountId: input.cashAccountId,
     city: input.city,
@@ -123,6 +124,7 @@ export function storedRequestFromValues(values: string[]): StoredVisitRequest {
     submissionId: cell(values, 0),
     status: (cell(values, 3) || "pending") as StoredVisitRequest["status"],
     tripType: cell(values, 4) as VisitRequestSubmission["tripType"],
+    accountName: cell(values, 24),
     cashUrl: cell(values, 5),
     cashAccountId: cell(values, 6),
     city: cell(values, 7),
@@ -160,7 +162,7 @@ function initialValues(input: VisitRequestSubmission) {
   return [
     input.submissionId, now, now, "pending", input.tripType, input.cashUrl, input.cashAccountId,
     input.city, input.state, input.start, input.end, "", "", "", "", "", "", "",
-    "not_started", "", "0", "", requestFingerprint(input), "",
+    "not_started", "", "0", "", requestFingerprint(input), "", input.accountName,
   ];
 }
 
@@ -176,7 +178,7 @@ async function sheetsFetch(path: string, init: RequestInit, fetchImpl: Fetch) {
 }
 
 async function readRows(fetchImpl: Fetch = fetch) {
-  const range = encodeURIComponent(`${REQUESTS_TAB}!A2:X10001`);
+  const range = encodeURIComponent(`${REQUESTS_TAB}!A2:Y10001`);
   const response = await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}?majorDimension=ROWS`,
     { method: "GET" },
@@ -196,7 +198,7 @@ async function appendValues(tab: string, values: string[], fetchImpl: Fetch) {
 }
 
 async function updateRow(row: RequestRow, fetchImpl: Fetch) {
-  const rangeName = `${REQUESTS_TAB}!A${row.rowNumber}:X${row.rowNumber}`;
+  const rangeName = `${REQUESTS_TAB}!A${row.rowNumber}:Y${row.rowNumber}`;
   await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(rangeName)}?valueInputOption=RAW`,
     { method: "PUT", body: JSON.stringify({ range: rangeName, majorDimension: "ROWS", values: [row.values] }) },
@@ -243,6 +245,26 @@ export async function listVisitRequests(fetchImpl: Fetch = fetch) {
 }
 
 export async function getVisitRequest(id: string, fetchImpl: Fetch = fetch) {
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
+}
+
+export async function setVisitRequestAccountName(
+  id: string,
+  value: unknown,
+  actorEmail: string,
+  fetchImpl: Fetch = fetch,
+) {
+  const accountName = normalizeAccountName(value);
+  if (!accountName) throw new Error("INVALID_ACCOUNT_NAME");
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row || row.request.status !== "pending") return null;
+  if (row.request.accountName) return row.request.accountName === accountName ? row.request : null;
+  row.values[2] = new Date().toISOString();
+  row.values[24] = accountName;
+  const updatedRequest = { ...row.request, accountName };
+  row.values[22] = requestFingerprint(updatedRequest);
+  await updateRow(row, fetchImpl);
+  await appendAudit(id, actorEmail, "account_name_added", { accountName }, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
@@ -379,7 +401,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
       body: JSON.stringify({
         valueInputOption: "RAW",
         data: [
-          { range: `${REQUESTS_TAB}!A1:X1`, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] },
+          { range: `${REQUESTS_TAB}!A1:Y1`, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] },
           { range: `${AUDIT_TAB}!A1:F1`, majorDimension: "ROWS", values: [[...AUDIT_HEADERS]] },
         ],
       }),

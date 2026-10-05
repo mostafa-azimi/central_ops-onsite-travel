@@ -32,6 +32,7 @@ type CalendarWriteInput = {
   traveler: Assignee;
   tripType: TripType;
   companyName: string;
+  cashUrl: string;
   city: string;
   state: string;
   start: string;
@@ -176,7 +177,7 @@ export async function createOrGetCalendarEvent(
   const payload = {
     id: eventId,
     summary: `${input.traveler}: ${input.companyName}`,
-    description: `Visit type: ${input.tripType}`,
+    description: `Visit type: ${input.tripType}\nCASH account: ${input.cashUrl}`,
     location: `${input.city}, ${input.state}`,
     start: { date: input.start },
     end: { date: inclusiveEndToExclusive(input.endInclusive) },

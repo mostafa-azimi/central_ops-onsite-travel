@@ -9,6 +9,7 @@ const request: StoredVisitRequest = {
   id: "4f75767a-905d-4b80-b185-f942d659b25f",
   submissionId: "4f75767a-905d-4b80-b185-f942d659b25f",
   tripType: "Onboarding",
+  accountName: "GTI Properties",
   cashUrl: "https://cash.shiphero.com/client/100000",
   cashAccountId: "100000",
   city: "Atlanta",
@@ -96,6 +97,7 @@ test("Calendar creation is deterministic and keeps the all-day end exclusive", a
     traveler: "Mike Azimi",
     tripType: request.tripType,
     companyName: "GTI",
+    cashUrl: request.cashUrl,
     city: request.city,
     state: request.state,
     start: request.start,
@@ -107,7 +109,9 @@ test("Calendar creation is deterministic and keeps the all-day end exclusive", a
   const payload = JSON.parse(String(calendarCall?.init?.body));
   assert.deepEqual(payload.start, { date: "2026-10-05" });
   assert.deepEqual(payload.end, { date: "2026-10-08" });
+  assert.equal(payload.summary, "Mike Azimi: GTI");
   assert.deepEqual(payload.attendees, [{ email: "mike.azimi@shiphero.com" }]);
+  assert.match(payload.description, /CASH account: https:\/\/cash\.shiphero\.com\/client\/100000/);
   assert.match(String(calendarCall?.url), /sendUpdates=all/);
   assert.equal(payload.extendedProperties.private.centralOpsRequestId, request.id);
 });
@@ -147,6 +151,7 @@ test("Calendar recovery adds the assigned traveler without duplicating the event
     traveler: "Mike Azimi",
     tripType: request.tripType,
     companyName: "CASH account 100000",
+    cashUrl: request.cashUrl,
     city: request.city,
     state: request.state,
     start: request.start,

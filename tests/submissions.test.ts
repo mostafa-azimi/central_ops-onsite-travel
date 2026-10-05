@@ -6,6 +6,7 @@ const valid = {
   submissionId: "4f75767a-905d-4b80-b185-f942d659b25f",
   tripType: "Onboarding",
   traveler: "Mike Azimi",
+  accountName: "GTI Properties",
   cashUrl: "https://cash.shiphero.com/client/100000",
   city: "Atlanta",
   state: "ga",
@@ -23,11 +24,13 @@ test("accepts only the fixed travelers and exact CASH account path", () => {
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.value.state, "GA");
+    assert.equal(result.value.accountName, "GTI Properties");
     assert.equal(result.value.cashAccountId, "100000");
     assert.equal(result.value.cashUrl, "https://cash.shiphero.com/client/100000");
   }
 
   assert.equal(validateVisitSubmission({ ...valid, traveler: "Joey Buckley" }).ok, false);
+  assert.equal(validateVisitSubmission({ ...valid, accountName: "  " }).ok, false);
   assert.equal(validateVisitSubmission({ ...valid, cashUrl: "https://evil.test/client/100000" }).ok, false);
 });
 

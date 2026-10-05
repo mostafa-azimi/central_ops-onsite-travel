@@ -7,6 +7,7 @@ export type VisitSubmission = {
   submissionId: string;
   tripType: TripType;
   traveler: Assignee;
+  accountName: string;
   cashUrl: string;
   cashAccountId: string;
   city: string;
@@ -16,6 +17,12 @@ export type VisitSubmission = {
 };
 
 export type VisitRequestSubmission = Omit<VisitSubmission, "traveler">;
+
+export function normalizeAccountName(input: unknown) {
+  const value = String(input ?? "").trim().replace(/\s+/g, " ");
+  if (!value || value.length > 120 || /[\u0000-\u001f\u007f]/.test(value)) return null;
+  return value;
+}
 
 function isDateOnly(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -38,6 +45,7 @@ export function validateVisitSubmission(input: unknown) {
   const submissionId = String(value.submissionId ?? "");
   const tripType = String(value.tripType ?? "");
   const traveler = String(value.traveler ?? "");
+  const accountName = normalizeAccountName(value.accountName);
   const cashUrl = String(value.cashUrl ?? "");
   const city = String(value.city ?? "").trim();
   const state = String(value.state ?? "").trim().toUpperCase();
@@ -47,6 +55,7 @@ export function validateVisitSubmission(input: unknown) {
   if (!/^[0-9a-f-]{20,64}$/i.test(submissionId)) return { ok: false as const, message: "Invalid submission ID." };
   if (!TRIP_TYPES.includes(tripType as TripType)) return { ok: false as const, message: "Select a valid visit type." };
   if (!ASSIGNEES.includes(traveler as Assignee)) return { ok: false as const, message: "Select an approved traveler." };
+  if (!accountName) return { ok: false as const, message: "Enter a valid account name." };
   if (!city || city.length > 80) return { ok: false as const, message: "Enter a valid city." };
   if (!/^[A-Z]{2}$/.test(state)) return { ok: false as const, message: "Enter a two-letter state code." };
   if (!isDateOnly(start) || !isDateOnly(end) || end < start) return { ok: false as const, message: "Enter a valid inclusive date range." };
@@ -66,6 +75,7 @@ export function validateVisitSubmission(input: unknown) {
       submissionId,
       tripType: tripType as TripType,
       traveler: traveler as Assignee,
+      accountName,
       cashUrl: canonicalCashUrl,
       cashAccountId,
       city,
@@ -88,6 +98,7 @@ export function validateVisitRequest(input: unknown) {
   const request: VisitRequestSubmission = {
     submissionId: parsed.value.submissionId,
     tripType: parsed.value.tripType,
+    accountName: parsed.value.accountName,
     cashUrl: parsed.value.cashUrl,
     cashAccountId: parsed.value.cashAccountId,
     city: parsed.value.city,
