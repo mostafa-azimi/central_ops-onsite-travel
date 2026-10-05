@@ -102,11 +102,12 @@ test("HubSpot company mapping requires one exact account and canonical CASH URL"
       account_id: "100000",
       name: "GTI",
       shiphero_cash__account_url: "https://cash.shiphero.com/client/100000/",
+      timezone: "America/New_York",
     },
   }] })) as typeof fetch;
   assert.deepEqual(
     await findVerifiedCompany("100000", "https://cash.shiphero.com/client/100000", goodFetch),
-    { id: "56996862100", name: "GTI" },
+    { id: "56996862100", name: "GTI", timeZone: "America/New_York" },
   );
 
   const duplicateFetch = (async () => Response.json({ results: [{ id: "1" }, { id: "2" }] })) as typeof fetch;
@@ -116,7 +117,7 @@ test("HubSpot company mapping requires one exact account and canonical CASH URL"
   );
 });
 
-test("HubSpot meeting uses New York boundaries and company association 188", async () => {
+test("HubSpot meeting uses 9 AM to 3 PM company-local time and company association 188", async () => {
   process.env.HUBSPOT_ACCESS_TOKEN = "test-token";
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -126,22 +127,28 @@ test("HubSpot meeting uses New York boundaries and company association 188", asy
     return Response.json({ id: "meeting-123" });
   }) as typeof fetch;
 
-  assert.deepEqual(meetingTimes("2026-10-05", "2026-10-08"), {
-    start: "2026-10-05T04:00:00.000Z",
-    end: "2026-10-08T04:00:00.000Z",
+  assert.deepEqual(meetingTimes("2026-10-05", "America/New_York"), {
+    start: "2026-10-05T13:00:00.000Z",
+    end: "2026-10-05T19:00:00.000Z",
+  });
+  assert.deepEqual(meetingTimes("2026-10-05", "America/Los_Angeles"), {
+    start: "2026-10-05T16:00:00.000Z",
+    end: "2026-10-05T22:00:00.000Z",
   });
   const id = await createOrGetHubSpotMeeting(
     request,
-    { id: "56996862100", name: "GTI" },
+    { id: "56996862100", name: "GTI", timeZone: "America/New_York" },
     "https://calendar.google.com/calendar/event?eid=safe",
-    "2026-10-08",
     fakeFetch,
   );
   assert.equal(id, "meeting-123");
   const createCall = calls.find((call) => call.url.endsWith("/crm/v3/objects/meetings"));
   const payload = JSON.parse(String(createCall?.init?.body));
-  assert.equal(payload.properties.hs_timestamp, "2026-10-05T04:00:00.000Z");
-  assert.equal(payload.properties.hs_meeting_end_time, "2026-10-08T04:00:00.000Z");
+  assert.equal(payload.properties.hs_timestamp, "2026-10-05T13:00:00.000Z");
+  assert.equal(payload.properties.hs_meeting_start_time, "2026-10-05T13:00:00.000Z");
+  assert.equal(payload.properties.hs_meeting_end_time, "2026-10-05T19:00:00.000Z");
+  assert.equal(payload.properties.hs_meeting_outcome, "SCHEDULED");
+  assert.equal(payload.properties.hs_activity_type, "On-Site");
   assert.equal(payload.associations[0].types[0].associationTypeId, 188);
   assert.equal(payload.associations[0].to.id, "56996862100");
 });

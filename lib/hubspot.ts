@@ -2,7 +2,6 @@ import type { StoredVisitRequest } from "@/lib/db";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const MEETING_TO_COMPANY_ASSOCIATION = 188;
-const NEW_YORK_TIME_ZONE = "America/New_York";
 type Fetch = typeof fetch;
 
 type HubSpotRecord = {
@@ -10,7 +9,7 @@ type HubSpotRecord = {
   properties?: Record<string, string | null>;
 };
 
-export type HubSpotCompany = { id: string; name: string };
+export type HubSpotCompany = { id: string; name: string; timeZone: string };
 
 export function hubSpotConfigured() {
   return Boolean(process.env.HUBSPOT_ACCESS_TOKEN);
@@ -42,7 +41,7 @@ export async function findVerifiedCompany(
     headers: headers(),
     body: JSON.stringify({
       filterGroups: [{ filters: [{ propertyName: "account_id", operator: "EQ", value: cashAccountId }] }],
-      properties: ["account_id", "name", "shiphero_cash__account_url"],
+      properties: ["account_id", "name", "shiphero_cash__account_url", "timezone"],
       limit: 2,
     }),
     cache: "no-store",
@@ -56,14 +55,20 @@ export async function findVerifiedCompany(
   if (properties.account_id !== cashAccountId || savedCashUrl !== canonicalCashUrl) {
     throw new Error("HubSpot company does not match the verified CASH account");
   }
-  return { id: company.id, name: String(properties.name ?? "Customer").trim() || "Customer" };
+  const timeZone = String(properties.timezone ?? "").trim();
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).format();
+  } catch {
+    throw new Error("HubSpot company has no valid Time Zone");
+  }
+  return { id: company.id, name: String(properties.name ?? "Customer").trim() || "Customer", timeZone };
 }
 
-function localMidnightUtc(date: string) {
+function localDateTimeUtc(date: string, hour: number, timeZone: string) {
   const [year, month, day] = date.split("-").map(Number);
-  const target = Date.UTC(year, month - 1, day);
+  const target = Date.UTC(year, month - 1, day, hour);
   const formatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: NEW_YORK_TIME_ZONE,
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -86,8 +91,11 @@ function localMidnightUtc(date: string) {
   return new Date(guess).toISOString();
 }
 
-export function meetingTimes(start: string, endExclusive: string) {
-  return { start: localMidnightUtc(start), end: localMidnightUtc(endExclusive) };
+export function meetingTimes(startDate: string, timeZone: string) {
+  return {
+    start: localDateTimeUtc(startDate, 9, timeZone),
+    end: localDateTimeUtc(startDate, 15, timeZone),
+  };
 }
 
 function meetingTitle(request: StoredVisitRequest, companyName: string) {
@@ -118,7 +126,6 @@ export async function createOrGetHubSpotMeeting(
   request: StoredVisitRequest,
   company: HubSpotCompany,
   calendarUrl: string,
-  endExclusive: string,
   fetchImpl: Fetch = fetch,
 ) {
   const title = meetingTitle(request, company.name);
@@ -130,7 +137,7 @@ export async function createOrGetHubSpotMeeting(
     return existing.id;
   }
 
-  const times = meetingTimes(request.start, endExclusive);
+  const times = meetingTimes(request.start, company.timeZone);
   const response = await fetchImpl(`${HUBSPOT_API}/crm/v3/objects/meetings`, {
     method: "POST",
     headers: headers(),
@@ -143,6 +150,7 @@ export async function createOrGetHubSpotMeeting(
         hs_meeting_location: `${request.city}, ${request.state}`,
         hs_meeting_external_url: calendarUrl,
         hs_meeting_outcome: "SCHEDULED",
+        hs_activity_type: "On-Site",
       },
       associations: [{
         to: { id: company.id },

@@ -8,7 +8,6 @@ import {
 } from "@/lib/db";
 import { createOrGetCalendarEvent, googleCalendarConfigured } from "@/lib/google-calendar";
 import { createOrGetHubSpotMeeting, findVerifiedCompany, hubSpotConfigured } from "@/lib/hubspot";
-import { inclusiveEndToExclusive } from "@/lib/submissions";
 import type { Assignee } from "@/lib/types";
 
 export class ApprovalError extends Error {
@@ -53,7 +52,6 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
       withCalendar,
       company,
       calendar.htmlLink,
-      inclusiveEndToExclusive(withCalendar.end),
     );
     const completed = await completeVisitRequestApproval(withCalendar.id, actorEmail, meetingId);
     if (!completed) throw new Error("Request changed while approval was being completed");
