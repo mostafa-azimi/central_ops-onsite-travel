@@ -127,6 +127,8 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .field-note, .field-error { margin: -8px 0 0; font-size: .82rem; }
 .field-note { color: var(--body); }
 .field-error { color: #aa2525; }
+.autocomplete-host { min-height: 48px; }
+.google-address-autocomplete { width: 100%; color-scheme: light; }
 .visit-form select, .visit-form input { width: 100%; height: 46px; padding: 0 12px; border: 1px solid var(--gray); border-radius: 6px; color: var(--navy); background: var(--white); }
 .visit-form select:focus, .visit-form input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(50, 129, 253, .16); outline: none; }
 .form-actions { display: flex; gap: 16px; align-items: center; margin-top: 4px; }

@@ -13,16 +13,21 @@ type AddressValue = {
 };
 
 type GooglePlace = {
-  formatted_address?: string;
-  place_id?: string;
-  address_components?: Array<{ long_name: string; short_name: string; types: string[] }>;
-  geometry?: { location?: { lat(): number; lng(): number } };
+  formattedAddress?: string;
+  id?: string;
+  addressComponents?: Array<{ longText?: string; shortText?: string; types: string[] }>;
+  location?: { lat(): number; lng(): number };
+  fetchFields(options: { fields: string[] }): Promise<void>;
 };
+
+type PlacePrediction = { toPlace(): GooglePlace };
+type PlaceSelectEvent = Event & { placePrediction?: PlacePrediction };
+type PlaceAutocompleteElement = HTMLElement & { placeholder: string };
 
 type GoogleMapsWindow = Window & {
   google?: {
     maps: {
-      places: { Autocomplete: new (input: HTMLInputElement, options: object) => { addListener(name: string, callback: () => void): void; getPlace(): GooglePlace } };
+      importLibrary(name: "places"): Promise<{ PlaceAutocompleteElement: new () => PlaceAutocompleteElement }>;
     };
   };
 };
@@ -52,12 +57,12 @@ export function loadGoogleMaps(apiKey: string) {
 }
 
 function component(place: GooglePlace, type: string, short = false) {
-  const match = place.address_components?.find((item) => item.types.includes(type));
-  return match ? (short ? match.short_name : match.long_name) : "";
+  const match = place.addressComponents?.find((item) => item.types.includes(type));
+  return match ? (short ? match.shortText : match.longText) ?? "" : "";
 }
 
 export function AddressFields({ apiKey = "", prefix = "" }: { apiKey?: string; prefix?: string }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const autocompleteHost = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState<AddressValue>({
     fullAddress: "", city: "", state: "", countryCode: "US", latitude: "", longitude: "", placeId: "",
   });
@@ -65,32 +70,37 @@ export function AddressFields({ apiKey = "", prefix = "" }: { apiKey?: string; p
   const name = (field: string) => `${prefix}${field}`;
 
   useEffect(() => {
-    if (!apiKey || !inputRef.current) return;
+    if (!apiKey || !autocompleteHost.current) return;
     let active = true;
-    void loadGoogleMaps(apiKey).then(() => {
-      if (!active || !inputRef.current) return;
+    void loadGoogleMaps(apiKey).then(async () => {
+      if (!active || !autocompleteHost.current) return;
       const google = (window as GoogleMapsWindow).google;
       if (!google) return;
-      const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
-        fields: ["address_components", "formatted_address", "geometry", "place_id"],
-        types: ["address"],
-      });
-      autocomplete.addListener("place_changed", () => {
-        const place = autocomplete.getPlace();
-        const location = place.geometry?.location;
+      const { PlaceAutocompleteElement } = await google.maps.importLibrary("places");
+      const autocomplete = new PlaceAutocompleteElement();
+      autocomplete.placeholder = "Start typing a customer address";
+      autocomplete.className = "google-address-autocomplete";
+      autocomplete.addEventListener("gmp-select", (rawEvent: Event) => {
+        const prediction = (rawEvent as PlaceSelectEvent).placePrediction;
+        if (!prediction) return;
+        const place = prediction.toPlace();
+        void place.fetchFields({ fields: ["formattedAddress", "addressComponents", "location", "id"] }).then(() => {
+        const location = place.location;
         const city = component(place, "locality") || component(place, "postal_town") || component(place, "administrative_area_level_2");
         const next = {
-          fullAddress: place.formatted_address ?? inputRef.current?.value ?? "",
+          fullAddress: place.formattedAddress ?? "",
           city,
           state: component(place, "administrative_area_level_1", true) || component(place, "administrative_area_level_1"),
           countryCode: component(place, "country", true).toUpperCase(),
           latitude: location ? String(location.lat()) : "",
           longitude: location ? String(location.lng()) : "",
-          placeId: place.place_id ?? "",
+          placeId: place.id ?? "",
         };
         setValue(next);
         setError(next.fullAddress && next.city && next.state && next.countryCode ? "" : "Please complete any missing address fields.");
+        }).catch(() => setError("That address could not be completed."));
       });
+      autocompleteHost.current.replaceChildren(autocomplete);
     }).catch((loadError: unknown) => setError(loadError instanceof Error ? loadError.message : "Address autocomplete could not load."));
     return () => { active = false; };
   }, [apiKey]);
@@ -105,7 +115,8 @@ export function AddressFields({ apiKey = "", prefix = "" }: { apiKey?: string; p
 
   return (
     <>
-      <label className="full"><span>Full street address</span><input ref={inputRef} name={name("fullAddress")} required maxLength={240} value={value.fullAddress} onChange={(event) => manual("fullAddress", event.target.value)} placeholder="Start typing an address" autoComplete="street-address" /></label>
+      {apiKey && <label className="full"><span>Find address with Google</span><div ref={autocompleteHost} className="autocomplete-host" /></label>}
+      <label className="full"><span>Full street address</span><input name={name("fullAddress")} required maxLength={240} value={value.fullAddress} onChange={(event) => manual("fullAddress", event.target.value)} placeholder="Start typing an address" autoComplete="street-address" /></label>
       <label><span>City</span><input name={name("city")} required maxLength={80} value={value.city} onChange={(event) => manual("city", event.target.value)} autoComplete="address-level2" /></label>
       <label><span>State, province, or region</span><input name={name("state")} required maxLength={100} value={value.state} onChange={(event) => manual("state", event.target.value)} autoComplete="address-level1" /></label>
       <label><span>Country code</span><input name={name("countryCode")} required minLength={2} maxLength={2} value={value.countryCode} onChange={(event) => manual("countryCode", event.target.value.toUpperCase())} placeholder="US" autoComplete="country" /></label>
