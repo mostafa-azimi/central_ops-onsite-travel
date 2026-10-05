@@ -31,7 +31,7 @@ export type StoredVisitRequest = VisitRequestSubmission & {
   hubspotMeetingId: string | null;
   hubspotCompanyId: string | null;
   calendarEventUrl: string | null;
-  syncStatus: "not_started" | "syncing_calendar" | "syncing_hubspot" | "complete" | "failed";
+  syncStatus: "not_started" | "syncing_calendar" | "awaiting_hubspot" | "syncing_hubspot" | "complete" | "failed";
   syncError: string | null;
   syncAttempts: number;
 };
@@ -265,7 +265,7 @@ export async function claimVisitRequestApproval(id: string, traveler: string, fe
   if (!row || row.request.status !== "pending") return null;
   if (row.request.assignedTraveler && row.request.assignedTraveler !== traveler) return null;
   const stale = row.syncStartedAt && Date.now() - new Date(row.syncStartedAt).getTime() > 15 * 60 * 1000;
-  if (!["not_started", "failed"].includes(row.request.syncStatus) && !stale) return null;
+  if (!["not_started", "awaiting_hubspot", "failed"].includes(row.request.syncStatus) && !stale) return null;
 
   const now = new Date().toISOString();
   const claimToken = randomUUID();
@@ -285,7 +285,7 @@ export async function saveCalendarResult(
   id: string,
   eventId: string,
   eventUrl: string,
-  companyId: string,
+  companyId: string | null,
   fetchImpl: Fetch = fetch,
 ) {
   const row = await findCanonicalRow(id, fetchImpl);
@@ -293,9 +293,28 @@ export async function saveCalendarResult(
   row.values[2] = new Date().toISOString();
   row.values[14] = eventId;
   row.values[15] = eventUrl;
-  row.values[17] = companyId;
+  if (companyId) row.values[17] = companyId;
   row.values[18] = "syncing_hubspot";
   await updateRow(row, fetchImpl);
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
+}
+
+export async function markVisitRequestAwaitingHubSpot(
+  id: string,
+  actorEmail: string,
+  fetchImpl: Fetch = fetch,
+) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row || row.request.status !== "pending" || !row.request.calendarEventId) return null;
+  row.values[2] = new Date().toISOString();
+  row.values[18] = "awaiting_hubspot";
+  row.values[19] = "";
+  row.values[21] = "";
+  row.values[23] = "";
+  await updateRow(row, fetchImpl);
+  await appendAudit(id, actorEmail, "calendar_scheduled", {
+    traveler: row.values[11], calendarEventId: row.values[14], hubspotStatus: "pending",
+  }, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 

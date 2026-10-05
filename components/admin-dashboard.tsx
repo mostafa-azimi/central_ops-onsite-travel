@@ -21,7 +21,7 @@ export function AdminDashboard({ initialRequests }: { initialRequests: StoredVis
       return;
     }
     if (result.request) setRequests((items) => items.map((item) => item.id === id ? result.request! : item));
-    setMessage(action === "deny" ? "Request denied." : "Request approved.");
+    setMessage(result.message ?? (action === "deny" ? "Request denied." : "Request approved."));
   }
 
   const pending = requests.filter((request) => request.status === "pending");
@@ -34,14 +34,16 @@ export function AdminDashboard({ initialRequests }: { initialRequests: StoredVis
           <article className="approval-card" key={request.id}>
             <div><h3>{request.tripType}</h3><p>{request.city}, {request.state} · {request.start} to {request.end}</p><a href={request.cashUrl} target="_blank" rel="noreferrer">CASH account {request.cashAccountId}</a></div>
             <div className="approval-actions">
-              <select aria-label={`Traveler for ${request.id}`} defaultValue="" id={`traveler-${request.id}`}>
+              {request.calendarEventUrl && <a href={request.calendarEventUrl} target="_blank" rel="noreferrer">View Calendar event</a>}
+              {request.syncStatus === "awaiting_hubspot" && <span className="duration">HubSpot pending</span>}
+              <select aria-label={`Traveler for ${request.id}`} defaultValue={request.assignedTraveler ?? ""} id={`traveler-${request.id}`}>
                 <option value="" disabled>Assign traveler</option>
                 {ASSIGNEES.map((name) => <option key={name}>{name}</option>)}
               </select>
               <button className="btn-primary" type="button" onClick={() => {
                 const select = document.getElementById(`traveler-${request.id}`) as HTMLSelectElement;
                 void decide(request.id, "approve", select.value);
-              }}>Approve</button>
+              }}>{request.calendarEventId ? "Retry HubSpot" : "Approve"}</button>
               <button className="filter" type="button" onClick={() => void decide(request.id, "deny")}>Deny</button>
             </div>
           </article>

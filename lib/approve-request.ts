@@ -3,6 +3,7 @@ import {
   completeVisitRequestApproval,
   failVisitRequestApproval,
   getVisitRequest,
+  markVisitRequestAwaitingHubSpot,
   saveCalendarResult,
   type StoredVisitRequest,
 } from "@/lib/db";
@@ -17,16 +18,15 @@ export class ApprovalError extends Error {
 }
 
 export function approvalConnectionsConfigured() {
-  return googleCalendarConfigured() && hubSpotConfigured();
+  return googleCalendarConfigured();
 }
 
 export function approvalConnectionError() {
   const calendar = googleCalendarConfigured();
   const hubSpot = hubSpotConfigured();
-  if (calendar && hubSpot) return null;
-  if (calendar) return "HubSpot write connection is not configured. Calendar is connected.";
+  if (calendar) return null;
   if (hubSpot) return "Calendar write connection is not configured. HubSpot is connected.";
-  return "Calendar and HubSpot write connections are not configured.";
+  return "Calendar write connection is not configured.";
 }
 
 export async function approveVisitRequest(id: string, traveler: Assignee, actorEmail: string) {
@@ -44,26 +44,54 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
   }
 
   try {
-    const company = await findVerifiedCompany(claimed.cashAccountId, claimed.cashUrl);
-    const calendar = await createOrGetCalendarEvent({
-      requestId: claimed.id,
+    let withCalendar = claimed;
+    if (!claimed.calendarEventId || !claimed.calendarEventUrl) {
+      const calendar = await createOrGetCalendarEvent({
+        requestId: claimed.id,
+        traveler,
+        tripType: claimed.tripType,
+        companyName: `CASH account ${claimed.cashAccountId}`,
+        city: claimed.city,
+        state: claimed.state,
+        start: claimed.start,
+        endInclusive: claimed.end,
+      });
+      const saved = await saveCalendarResult(claimed.id, calendar.id, calendar.htmlLink, null);
+      if (!saved) throw new Error("Request changed while Calendar result was being saved");
+      withCalendar = saved;
+    }
+
+    if (!hubSpotConfigured()) {
+      const awaiting = await markVisitRequestAwaitingHubSpot(withCalendar.id, actorEmail);
+      if (!awaiting) throw new Error("Calendar was created but its pending HubSpot status could not be saved");
+      return awaiting;
+    }
+
+    const company = await findVerifiedCompany(withCalendar.cashAccountId, withCalendar.cashUrl);
+    const namedCalendar = await createOrGetCalendarEvent({
+      requestId: withCalendar.id,
       traveler,
-      tripType: claimed.tripType,
+      tripType: withCalendar.tripType,
       companyName: company.name,
-      city: claimed.city,
-      state: claimed.state,
-      start: claimed.start,
-      endInclusive: claimed.end,
+      city: withCalendar.city,
+      state: withCalendar.state,
+      start: withCalendar.start,
+      endInclusive: withCalendar.end,
     });
-    const withCalendar = await saveCalendarResult(claimed.id, calendar.id, calendar.htmlLink, company.id);
-    if (!withCalendar) throw new Error("Request changed while Calendar result was being saved");
+    const savedCompany = await saveCalendarResult(
+      withCalendar.id,
+      namedCalendar.id,
+      namedCalendar.htmlLink,
+      company.id,
+    );
+    if (!savedCompany) throw new Error("Request changed while HubSpot company result was being saved");
 
     const meetingId = await createOrGetHubSpotMeeting(
-      withCalendar,
+      savedCompany,
       company,
-      calendar.htmlLink,
+      namedCalendar.htmlLink,
     );
-    const completed = await completeVisitRequestApproval(withCalendar.id, actorEmail, meetingId);
+    const completed = await completeVisitRequestApproval(savedCompany.id, actorEmail, meetingId);
     if (!completed) throw new Error("Request changed while approval was being completed");
     return completed;
   } catch (error) {

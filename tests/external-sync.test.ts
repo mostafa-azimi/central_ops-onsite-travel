@@ -38,7 +38,7 @@ test("approval connection status identifies only the missing service", () => {
   process.env.GOOGLE_CALENDAR_CLIENT_SECRET = "calendar-secret";
   process.env.GOOGLE_CALENDAR_REFRESH_TOKEN = "calendar-refresh";
   delete process.env.HUBSPOT_ACCESS_TOKEN;
-  assert.equal(approvalConnectionError(), "HubSpot write connection is not configured. Calendar is connected.");
+  assert.equal(approvalConnectionError(), null);
   if (originalHubSpot === undefined) delete process.env.HUBSPOT_ACCESS_TOKEN; else process.env.HUBSPOT_ACCESS_TOKEN = originalHubSpot;
   if (originalClientId === undefined) delete process.env.GOOGLE_CALENDAR_CLIENT_ID; else process.env.GOOGLE_CALENDAR_CLIENT_ID = originalClientId;
   if (originalClientSecret === undefined) delete process.env.GOOGLE_CALENDAR_CLIENT_SECRET; else process.env.GOOGLE_CALENDAR_CLIENT_SECRET = originalClientSecret;
@@ -107,8 +107,57 @@ test("Calendar creation is deterministic and keeps the all-day end exclusive", a
   const payload = JSON.parse(String(calendarCall?.init?.body));
   assert.deepEqual(payload.start, { date: "2026-10-05" });
   assert.deepEqual(payload.end, { date: "2026-10-08" });
-  assert.equal(payload.attendees, undefined);
+  assert.deepEqual(payload.attendees, [{ email: "mike.azimi@shiphero.com" }]);
+  assert.match(String(calendarCall?.url), /sendUpdates=all/);
   assert.equal(payload.extendedProperties.private.centralOpsRequestId, request.id);
+});
+
+test("Calendar recovery adds the assigned traveler without duplicating the event", async () => {
+  process.env.GOOGLE_CALENDAR_CLIENT_ID = "test-client";
+  process.env.GOOGLE_CALENDAR_CLIENT_SECRET = "test-secret";
+  process.env.GOOGLE_CALENDAR_REFRESH_TOKEN = "test-refresh";
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const eventId = "cot4f75767a905d4b80b185f942d659b25f";
+  const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.includes("oauth2.googleapis.com")) return Response.json({ access_token: "access", expires_in: 3600 });
+    if (init?.method === "POST") return new Response("conflict", { status: 409 });
+    if (init?.method === "PATCH") {
+      const body = JSON.parse(String(init.body));
+      return Response.json({
+        id: eventId,
+        htmlLink: "https://calendar.google.com/calendar/event?eid=safe",
+        summary: body.summary,
+        attendees: body.attendees,
+        extendedProperties: body.extendedProperties,
+      });
+    }
+    return Response.json({
+      id: eventId,
+      htmlLink: "https://calendar.google.com/calendar/event?eid=safe",
+      summary: "Mike Azimi: CASH account 100000",
+      attendees: [],
+      extendedProperties: { private: { centralOpsRequestId: request.id } },
+    });
+  }) as typeof fetch;
+
+  const result = await createOrGetCalendarEvent({
+    requestId: request.id,
+    traveler: "Mike Azimi",
+    tripType: request.tripType,
+    companyName: "CASH account 100000",
+    city: request.city,
+    state: request.state,
+    start: request.start,
+    endInclusive: request.end,
+  }, fakeFetch);
+
+  assert.equal(result.id, eventId);
+  const patchCall = calls.find((call) => call.init?.method === "PATCH");
+  assert.match(String(patchCall?.url), /sendUpdates=all/);
+  assert.deepEqual(JSON.parse(String(patchCall?.init?.body)).attendees, [{ email: "mike.azimi@shiphero.com" }]);
+  assert.equal(calls.filter((call) => call.init?.method === "POST").length, 1);
 });
 
 test("HubSpot company mapping requires one exact account and canonical CASH URL", async () => {

@@ -27,7 +27,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         body.traveler as (typeof ASSIGNEES)[number],
         admin.email,
       );
-      return NextResponse.json({ request: approved });
+      const message = approved.syncStatus === "awaiting_hubspot"
+        ? "Calendar event created and the assigned traveler was invited. HubSpot is pending."
+        : "Request approved and synchronized.";
+      return NextResponse.json({ request: approved, message });
     } catch (error) {
       if (error instanceof ApprovalError) {
         const status = error.code === "not_configured" ? 503 : error.code === "conflict" ? 409 : 502;

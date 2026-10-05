@@ -16,7 +16,15 @@ type GoogleEvent = {
   htmlLink?: string;
   start?: { date?: string; dateTime?: string };
   end?: { date?: string; dateTime?: string };
+  attendees?: Array<{ email?: string }>;
   extendedProperties?: { private?: Record<string, string> };
+};
+
+const TRAVELER_EMAILS: Record<Assignee, string> = {
+  "Chris Haun": "chris.haun@shiphero.com",
+  "Mike Azimi": "mike.azimi@shiphero.com",
+  "Rob McFaul": "rob.mcfaul@shiphero.com",
+  "Sam Armenia": "samuel.armenia@shiphero.com",
 };
 
 type CalendarWriteInput = {
@@ -164,6 +172,7 @@ export async function createOrGetCalendarEvent(
 ): Promise<CalendarWriteResult> {
   const token = await getGoogleAccessToken(fetchImpl);
   const eventId = deterministicEventId(input.requestId);
+  const travelerEmail = TRAVELER_EMAILS[input.traveler];
   const payload = {
     id: eventId,
     summary: `${input.traveler}: ${input.companyName}`,
@@ -171,13 +180,14 @@ export async function createOrGetCalendarEvent(
     location: `${input.city}, ${input.state}`,
     start: { date: input.start },
     end: { date: inclusiveEndToExclusive(input.endInclusive) },
+    attendees: [{ email: travelerEmail }],
     transparency: "opaque",
     extendedProperties: {
       private: { centralOpsRequestId: input.requestId, tripType: input.tripType },
     },
   };
   const url = `${CALENDAR_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`;
-  const response = await fetchImpl(url, {
+  const response = await fetchImpl(`${url}?sendUpdates=all`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -197,5 +207,36 @@ export async function createOrGetCalendarEvent(
     cache: "no-store",
   });
   if (!existing.ok) throw new Error(`Calendar event recovery failed: ${await responseMessage(existing)}`);
-  return verifyExistingEvent((await existing.json()) as GoogleEvent, eventId, input.requestId);
+  const existingEvent = (await existing.json()) as GoogleEvent;
+  const result = verifyExistingEvent(existingEvent, eventId, input.requestId);
+  const hasTraveler = existingEvent.attendees?.some(
+    (attendee) => attendee.email?.toLowerCase() === travelerEmail.toLowerCase(),
+  );
+  const summaryChanged = existingEvent.summary !== payload.summary;
+  if (!hasTraveler || summaryChanged) {
+    const attendees = hasTraveler
+      ? existingEvent.attendees
+      : [...(existingEvent.attendees ?? []), { email: travelerEmail }];
+    const updated = await fetchImpl(
+      `${url}/${encodeURIComponent(eventId)}?sendUpdates=${hasTraveler ? "none" : "all"}`,
+      {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary: payload.summary,
+          description: payload.description,
+          location: payload.location,
+          start: payload.start,
+          end: payload.end,
+          attendees,
+          transparency: payload.transparency,
+          extendedProperties: payload.extendedProperties,
+        }),
+        cache: "no-store",
+      },
+    );
+    if (!updated.ok) throw new Error(`Calendar event update failed: ${await responseMessage(updated)}`);
+    return verifyExistingEvent((await updated.json()) as GoogleEvent, eventId, input.requestId);
+  }
+  return result;
 }
