@@ -57,6 +57,10 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
         cashUrl: claimed.cashUrl,
         city: claimed.city,
         state: claimed.state,
+        fullAddress: claimed.fullAddress,
+        countryCode: claimed.countryCode,
+        latitude: claimed.latitude,
+        longitude: claimed.longitude,
         start: claimed.start,
         endInclusive: claimed.end,
       });
@@ -80,6 +84,10 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
       cashUrl: withCalendar.cashUrl,
       city: withCalendar.city,
       state: withCalendar.state,
+      fullAddress: withCalendar.fullAddress,
+      countryCode: withCalendar.countryCode,
+      latitude: withCalendar.latitude,
+      longitude: withCalendar.longitude,
       start: withCalendar.start,
       endInclusive: withCalendar.end,
     });

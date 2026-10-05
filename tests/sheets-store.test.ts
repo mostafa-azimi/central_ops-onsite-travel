@@ -17,8 +17,13 @@ const request: VisitRequestSubmission = {
   accountName: "GTI Properties",
   cashUrl: "https://cash.shiphero.com/client/100000",
   cashAccountId: "100000",
+  fullAddress: "123 Peachtree St NE, Atlanta, GA 30303, USA",
   city: "Atlanta",
   state: "GA",
+  countryCode: "US",
+  latitude: 33.77,
+  longitude: -84.38,
+  placeId: "test-place",
   start: "2026-10-05",
   end: "2026-10-07",
 };
@@ -47,7 +52,8 @@ function fakeStore() {
     }
     if (init?.method === "PUT" && url.includes("Requests!")) {
       const body = JSON.parse(String(init.body)) as { range: string; values: string[][] };
-      const rowNumber = Number(/A(\d+):Y/.exec(body.range)?.[1]);
+      if (body.range === "Requests!A1:AG1") return Response.json({ updatedRows: 1 });
+      const rowNumber = Number(/A(\d+):AG/.exec(body.range)?.[1]);
       requests[rowNumber - 2] = [...body.values[0]];
       return Response.json({ updatedRows: 1 });
     }
@@ -139,5 +145,5 @@ test("Sheet setup creates only Requests and Audit tabs with fixed headers", asyn
   const create = createBody as unknown as { sheets: Array<{ properties: { title: string } }> };
   assert.deepEqual(create.sheets.map((sheet) => sheet.properties.title), ["Requests", "Audit"]);
   const batch = batchBody as unknown as { data: Array<{ range: string }> };
-  assert.deepEqual(batch.data.map((item) => item.range), ["Requests!A1:Y1", "Audit!A1:F1"]);
+  assert.deepEqual(batch.data.map((item) => item.range), ["Requests!A1:AG1", "Audit!A1:F1"]);
 });

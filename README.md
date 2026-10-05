@@ -9,6 +9,7 @@ A lightweight public Next.js dashboard for upcoming customer onsite travel.
 - Returns a minimal DTO: assignee, customer, safe location, dates, and all-day status.
 - Never exposes descriptions, emails, meeting links, or excluded people.
 - Does not iframe the source calendar.
+- Keeps the map, attendee names, and participation controls behind verified `@shiphero.com` Google sign-in.
 
 ## Calendar refresh
 
@@ -24,6 +25,8 @@ Google administrator sign-in requires a separate web OAuth client with redirect 
 
 The approval path first creates one all-day Calendar event and sends an invitation to the assigned traveler. If HubSpot is not connected, the request stays pending with its Calendar event ID recorded and can be retried later without creating a duplicate event or invitation. Once HubSpot is available, the workflow associates one meeting to a deterministically resolved company. CASH account IDs map only through HubSpot company string property `account_id`; the lookup must return exactly one company and its `shiphero_cash__account_url` must match the canonical submitted URL. The HubSpot meeting runs from 9:00 AM to 3:00 PM on the first requested date in the matched company's valid HubSpot `timezone`, with outcome `SCHEDULED` and activity type `On-Site`; HubSpot completion fails safely if the company timezone is absent or invalid. Calendar end dates are stored end-exclusive. A deterministic Google event ID and unique HubSpot meeting title make partial retries recoverable. The private Google Sheet persists synchronization state, external IDs, errors, decisions, and audit rows before an approval is marked complete. The public browser never receives the Sheet ID, OAuth credential, audit data, or raw rows.
 
+The public request form accepts full international addresses. When Google Maps Platform is configured, Places autocomplete fills the city, region, country code, coordinates, and Place ID. Manual international entry remains available when it is not configured. `/map` is employee-only and defaults to North America, then fits active engagements in any other region. It lists participant names without exposing attendee emails. Any verified ShipHero employee can join or leave as a shadower; this adds or removes that employee from the Google Calendar attendees and sends Calendar updates. The assigned traveler cannot leave their own visit. Administrators can reschedule or cancel scheduled visits, and Calendar attendees are notified. Participant, reschedule, and cancellation updates are recorded as pending HubSpot lifecycle actions until the HubSpot credential is available.
+
 Required runtime configuration:
 
 - `GOOGLE_SHEETS_CLIENT_ID`, `GOOGLE_SHEETS_CLIENT_SECRET`, and `GOOGLE_SHEETS_REFRESH_TOKEN` for a server-side OAuth grant limited to `drive.file`
@@ -31,6 +34,7 @@ Required runtime configuration:
 - `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, and `GOOGLE_CALENDAR_REFRESH_TOKEN` for server-side Calendar event read/write
 - `HUBSPOT_ACCESS_TOKEN` with company read and meeting-create permissions
 - `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` for administrator sign-in
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` for a browser key restricted to the production hostname and only Maps JavaScript, Places, and Geocoding APIs
 
 All credentials remain server-side. The application fails closed when any required connection is absent and never returns a mock write success.
 

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { allowedAssignee, CALENDAR_ID, CALENDAR_TIME_ZONE, publicFields } from "@/lib/calendar";
 import { inclusiveEndToExclusive, type TripType } from "@/lib/submissions";
-import type { Assignee, TravelEvent } from "@/lib/types";
+import type { Assignee, EmployeeTravelEvent, TravelEvent } from "@/lib/types";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
@@ -16,11 +16,11 @@ type GoogleEvent = {
   htmlLink?: string;
   start?: { date?: string; dateTime?: string };
   end?: { date?: string; dateTime?: string };
-  attendees?: Array<{ email?: string }>;
+  attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
   extendedProperties?: { private?: Record<string, string> };
 };
 
-const TRAVELER_EMAILS: Record<Assignee, string> = {
+export const TRAVELER_EMAILS: Record<Assignee, string> = {
   "Chris Haun": "chris.haun@shiphero.com",
   "Mike Azimi": "mike.azimi@shiphero.com",
   "Rob McFaul": "rob.mcfaul@shiphero.com",
@@ -35,9 +35,26 @@ type CalendarWriteInput = {
   cashUrl: string;
   city: string;
   state: string;
+  fullAddress?: string;
+  countryCode?: string;
+  latitude?: number | null;
+  longitude?: number | null;
   start: string;
   endInclusive: string;
 };
+
+function employeeName(attendee: { email?: string; displayName?: string }) {
+  const email = String(attendee.email ?? "").toLowerCase();
+  if (!email.endsWith("@shiphero.com")) return null;
+  const displayName = String(attendee.displayName ?? "").trim();
+  if (displayName) return displayName;
+  return email.split("@")[0].split(/[._-]/).map((part) => part ? part[0].toUpperCase() + part.slice(1) : "").join(" ");
+}
+
+function finiteCoordinate(value: string | undefined, min: number, max: number) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max ? number : null;
+}
 
 export type CalendarWriteResult = {
   id: string;
@@ -151,6 +168,131 @@ export async function fetchGoogleTravelEvents(
   return events.sort((a, b) => a.start.localeCompare(b.start));
 }
 
+export async function fetchEmployeeTravelEvents(
+  employeeEmail: string,
+  now = new Date(),
+  fetchImpl: Fetch = fetch,
+): Promise<EmployeeTravelEvent[]> {
+  const token = await getGoogleAccessToken(fetchImpl);
+  const through = new Date(now.getTime() + 366 * 24 * 60 * 60 * 1000);
+  const query = new URLSearchParams({
+    singleEvents: "true",
+    showDeleted: "false",
+    orderBy: "startTime",
+    maxResults: "2500",
+    timeMin: now.toISOString(),
+    timeMax: through.toISOString(),
+    timeZone: CALENDAR_TIME_ZONE,
+  });
+  const response = await fetchImpl(
+    `${CALENDAR_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events?${query}`,
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+  );
+  if (!response.ok) throw new Error(`Google Calendar read failed: ${await responseMessage(response)}`);
+  const body = (await response.json()) as { items?: GoogleEvent[] };
+  return (body.items ?? []).flatMap((event) => {
+    const publicEvent = googleEventToPublic(event);
+    if (!publicEvent || !event.id) return [];
+    const participants = new Set<string>([publicEvent.assignee]);
+    for (const attendee of event.attendees ?? []) {
+      if (attendee.responseStatus === "declined") continue;
+      const name = employeeName(attendee);
+      if (name) participants.add(name);
+    }
+    const privateProperties = event.extendedProperties?.private ?? {};
+    return [{
+      ...publicEvent,
+      calendarEventId: event.id,
+      participants: [...participants],
+      joined: (event.attendees ?? []).some((attendee) => attendee.email?.toLowerCase() === employeeEmail.toLowerCase()),
+      latitude: finiteCoordinate(privateProperties.latitude, -90, 90),
+      longitude: finiteCoordinate(privateProperties.longitude, -180, 180),
+    }];
+  });
+}
+
+async function getManagedCalendarEvent(eventId: string, fetchImpl: Fetch) {
+  if (!/^[a-z0-9_-]{5,1024}$/i.test(eventId)) throw new Error("INVALID_EVENT_ID");
+  const token = await getGoogleAccessToken(fetchImpl);
+  const url = `${CALENDAR_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`;
+  const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+  if (!response.ok) throw new Error(`Calendar event lookup failed: ${await responseMessage(response)}`);
+  const event = (await response.json()) as GoogleEvent;
+  const assignee = allowedAssignee(String(event.summary ?? ""));
+  if (!assignee || event.status === "cancelled") throw new Error("EVENT_NOT_AVAILABLE");
+  return { token, url, event, assignee };
+}
+
+export async function updateCalendarAttendance(
+  eventId: string,
+  employeeEmail: string,
+  action: "join" | "leave",
+  fetchImpl: Fetch = fetch,
+) {
+  const normalizedEmail = employeeEmail.trim().toLowerCase();
+  if (!normalizedEmail.endsWith("@shiphero.com")) throw new Error("EMPLOYEE_EMAIL_REQUIRED");
+  const { token, url, event, assignee } = await getManagedCalendarEvent(eventId, fetchImpl);
+  const primaryEmail = TRAVELER_EMAILS[assignee].toLowerCase();
+  if (action === "leave" && normalizedEmail === primaryEmail) throw new Error("PRIMARY_TRAVELER_CANNOT_LEAVE");
+  const current = event.attendees ?? [];
+  const isAttending = current.some((attendee) => attendee.email?.toLowerCase() === normalizedEmail);
+  if ((action === "join" && isAttending) || (action === "leave" && !isAttending)) {
+    return {
+      requestId: event.extendedProperties?.private?.centralOpsRequestId ?? null,
+      participants: [...new Set([assignee, ...current.map(employeeName).filter((name): name is string => Boolean(name))])],
+    };
+  }
+  const attendees = action === "join"
+    ? [...current, { email: normalizedEmail }]
+    : current.filter((attendee) => attendee.email?.toLowerCase() !== normalizedEmail);
+  const response = await fetchImpl(`${url}?sendUpdates=all`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ attendees }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Calendar attendee update failed: ${await responseMessage(response)}`);
+  return {
+    requestId: event.extendedProperties?.private?.centralOpsRequestId ?? null,
+    participants: [...new Set([assignee, ...attendees.map(employeeName).filter((name): name is string => Boolean(name))])],
+  };
+}
+
+export async function rescheduleCalendarEvent(
+  eventId: string,
+  input: { start: string; endInclusive: string; fullAddress: string; latitude?: number | null; longitude?: number | null },
+  fetchImpl: Fetch = fetch,
+) {
+  const { token, url, event } = await getManagedCalendarEvent(eventId, fetchImpl);
+  const privateProperties = { ...(event.extendedProperties?.private ?? {}) };
+  if (input.latitude != null) privateProperties.latitude = String(input.latitude);
+  if (input.longitude != null) privateProperties.longitude = String(input.longitude);
+  const response = await fetchImpl(`${url}?sendUpdates=all`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      start: { date: input.start },
+      end: { date: inclusiveEndToExclusive(input.endInclusive) },
+      location: input.fullAddress,
+      extendedProperties: { private: privateProperties },
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Calendar reschedule failed: ${await responseMessage(response)}`);
+}
+
+export async function cancelCalendarEvent(eventId: string, fetchImpl: Fetch = fetch) {
+  const { token, url } = await getManagedCalendarEvent(eventId, fetchImpl);
+  const response = await fetchImpl(`${url}?sendUpdates=all`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok && response.status !== 410) {
+    throw new Error(`Calendar cancellation failed: ${await responseMessage(response)}`);
+  }
+}
+
 function deterministicEventId(requestId: string) {
   return `cot${requestId.replace(/-/g, "").toLowerCase()}`;
 }
@@ -178,13 +320,19 @@ export async function createOrGetCalendarEvent(
     id: eventId,
     summary: `${input.traveler}: ${input.companyName}`,
     description: `Visit type: ${input.tripType}\nCASH account: ${input.cashUrl}`,
-    location: `${input.city}, ${input.state}`,
+    location: input.fullAddress || [input.city, input.state].filter(Boolean).join(", "),
     start: { date: input.start },
     end: { date: inclusiveEndToExclusive(input.endInclusive) },
     attendees: [{ email: travelerEmail }],
     transparency: "opaque",
     extendedProperties: {
-      private: { centralOpsRequestId: input.requestId, tripType: input.tripType },
+      private: {
+        centralOpsRequestId: input.requestId,
+        tripType: input.tripType,
+        ...(input.countryCode ? { countryCode: input.countryCode } : {}),
+        ...(input.latitude != null ? { latitude: String(input.latitude) } : {}),
+        ...(input.longitude != null ? { longitude: String(input.longitude) } : {}),
+      },
     },
   };
   const url = `${CALENDAR_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events`;

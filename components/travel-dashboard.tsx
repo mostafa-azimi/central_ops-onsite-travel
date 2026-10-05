@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { ASSIGNEES, type Assignee, type TravelFeed } from "@/lib/types";
+import { AddressFields } from "@/components/address-fields";
 
 const TZ = "America/New_York";
 
@@ -60,9 +61,11 @@ function durationLabel(start: string, end: string, allDay: boolean) {
 export function TravelDashboard({
   feed,
   requestStorageConfigured,
+  mapsApiKey,
 }: {
   feed: TravelFeed;
   requestStorageConfigured: boolean;
+  mapsApiKey: string;
 }) {
   const [view, setView] = useState<"schedule" | "submit">("schedule");
   const [query, setQuery] = useState("");
@@ -103,7 +106,12 @@ export function TravelDashboard({
       accountName: String(form.get("accountName")).trim(),
       cashUrl: String(form.get("cashUrl")),
       city: String(form.get("city")).trim(),
-      state: String(form.get("state")).trim().toUpperCase(),
+      state: String(form.get("state")).trim(),
+      fullAddress: String(form.get("fullAddress")).trim(),
+      countryCode: String(form.get("countryCode")).trim().toUpperCase(),
+      latitude: String(form.get("latitude")),
+      longitude: String(form.get("longitude")),
+      placeId: String(form.get("placeId")),
       start: String(form.get("start")),
       end: String(form.get("end")),
     };
@@ -148,6 +156,7 @@ export function TravelDashboard({
         <nav className="view-tabs" aria-label="Travel workspace">
           <button type="button" className={view === "schedule" ? "active" : ""} onClick={() => setView("schedule")}>Upcoming travel</button>
           <button type="button" className={view === "submit" ? "active" : ""} onClick={() => setView("submit")}>Submit a visit</button>
+          <a href="/map">Team map</a>
         </nav>
 
         {view === "schedule" ? (
@@ -217,8 +226,7 @@ export function TravelDashboard({
               <label><span>Visit type</span><select name="tripType" required defaultValue=""><option value="" disabled>Select a visit type</option><option>Onboarding</option><option>Central Ops onsite</option></select></label>
               <label className="full"><span>Account name</span><input name="accountName" required maxLength={120} placeholder="Customer account name" autoComplete="organization" /></label>
               <label className="full"><span>Customer link in CASH</span><input name="cashUrl" type="url" required placeholder="Paste the customer CASH link" /></label>
-              <label><span>City</span><input name="city" required autoComplete="address-level2" /></label>
-              <label><span>State</span><input name="state" required minLength={2} maxLength={2} placeholder="GA" autoComplete="address-level1" /></label>
+              <AddressFields apiKey={mapsApiKey} />
               <label><span>Start date</span><input name="start" type="date" required onChange={(event) => setFormStart(event.target.value)} /></label>
               <label><span>End date</span><input name="end" type="date" required min={formStart || undefined} /></label>
               <div className="form-actions full">

@@ -147,10 +147,11 @@ export async function createOrGetHubSpotMeeting(
         hs_meeting_start_time: times.start,
         hs_meeting_end_time: times.end,
         hs_meeting_title: title,
-        hs_meeting_location: `${request.city}, ${request.state}`,
+        hs_meeting_location: request.fullAddress,
         hs_meeting_external_url: calendarUrl,
         hs_meeting_outcome: "SCHEDULED",
         hs_activity_type: "On-Site",
+        ...((request.participantsSnapshot ?? []).length > 0 ? { hs_meeting_body: `Visit participants: ${request.participantsSnapshot.join(", ")}` } : {}),
       },
       associations: [{
         to: { id: company.id },
@@ -163,4 +164,47 @@ export async function createOrGetHubSpotMeeting(
   const meeting = (await response.json()) as HubSpotRecord;
   if (!meeting.id) throw new Error("HubSpot meeting creation returned no ID");
   return meeting.id;
+}
+
+export async function updateHubSpotMeetingParticipants(
+  meetingId: string,
+  participants: string[],
+  fetchImpl: Fetch = fetch,
+) {
+  const response = await fetchImpl(`${HUBSPOT_API}/crm/v3/objects/meetings/${encodeURIComponent(meetingId)}`, {
+    method: "PATCH",
+    headers: headers(),
+    body: JSON.stringify({ properties: { hs_meeting_body: `Visit participants: ${participants.join(", ")}` } }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`HubSpot participant update failed: ${await responseMessage(response)}`);
+}
+
+
+export async function updateHubSpotMeetingLifecycle(
+  request: StoredVisitRequest,
+  company: HubSpotCompany,
+  action: "reschedule" | "cancel",
+  fetchImpl: Fetch = fetch,
+) {
+  if (!request.hubspotMeetingId) throw new Error("HUBSPOT_MEETING_NOT_CREATED");
+  const properties: Record<string, string> = action === "cancel"
+    ? { hs_meeting_outcome: "CANCELED" }
+    : {
+      ...meetingTimes(request.start, company.timeZone),
+      hs_timestamp: meetingTimes(request.start, company.timeZone).start,
+      hs_meeting_start_time: meetingTimes(request.start, company.timeZone).start,
+      hs_meeting_end_time: meetingTimes(request.start, company.timeZone).end,
+      hs_meeting_location: request.fullAddress,
+      hs_meeting_outcome: "SCHEDULED",
+    };
+  delete properties.start;
+  delete properties.end;
+  const response = await fetchImpl(`${HUBSPOT_API}/crm/v3/objects/meetings/${encodeURIComponent(request.hubspotMeetingId)}`, {
+    method: "PATCH",
+    headers: headers(),
+    body: JSON.stringify({ properties }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`HubSpot meeting update failed: ${await responseMessage(response)}`);
 }

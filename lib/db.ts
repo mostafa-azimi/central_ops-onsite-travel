@@ -5,7 +5,7 @@ const SHEETS_API = "https://sheets.googleapis.com/v4";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REQUESTS_TAB = "Requests";
 const AUDIT_TAB = "Audit";
-const REQUEST_COLUMN_COUNT = 25;
+const REQUEST_COLUMN_COUNT = 33;
 type Fetch = typeof fetch;
 
 export const REQUEST_HEADERS = [
@@ -14,6 +14,8 @@ export const REQUEST_HEADERS = [
   "decided_by_email", "calendar_event_id", "calendar_event_url", "hubspot_meeting_id",
   "hubspot_company_id", "sync_status", "sync_started_at", "sync_attempts", "sync_error",
   "payload_fingerprint", "claim_token", "account_name",
+  "full_address", "country_code", "latitude", "longitude", "place_id",
+  "lifecycle_action", "lifecycle_version", "participants_snapshot",
 ] as const;
 
 export const AUDIT_HEADERS = [
@@ -22,7 +24,7 @@ export const AUDIT_HEADERS = [
 
 export type StoredVisitRequest = VisitRequestSubmission & {
   id: string;
-  status: "pending" | "approved" | "denied";
+  status: "pending" | "approved" | "denied" | "cancelled";
   createdAt: string;
   assignedTraveler: string | null;
   decidedAt: string | null;
@@ -34,6 +36,9 @@ export type StoredVisitRequest = VisitRequestSubmission & {
   syncStatus: "not_started" | "syncing_calendar" | "awaiting_hubspot" | "syncing_hubspot" | "complete" | "failed";
   syncError: string | null;
   syncAttempts: number;
+  lifecycleAction: "create" | "reschedule" | "cancel" | "participants";
+  lifecycleVersion: number;
+  participantsSnapshot: string[];
 };
 
 type RequestRow = {
@@ -46,6 +51,7 @@ type RequestRow = {
 };
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
+let schemaEnsured = false;
 
 export function databaseConfigured() {
   return Boolean(
@@ -111,8 +117,13 @@ export function requestFingerprint(input: VisitRequestSubmission) {
     accountName: input.accountName,
     cashUrl: input.cashUrl,
     cashAccountId: input.cashAccountId,
+    fullAddress: input.fullAddress,
     city: input.city,
     state: input.state,
+    countryCode: input.countryCode,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    placeId: input.placeId,
     start: input.start,
     end: input.end,
   })).digest("hex");
@@ -127,8 +138,13 @@ export function storedRequestFromValues(values: string[]): StoredVisitRequest {
     accountName: cell(values, 24),
     cashUrl: cell(values, 5),
     cashAccountId: cell(values, 6),
+    fullAddress: cell(values, 25) || [cell(values, 7), cell(values, 8)].filter(Boolean).join(", "),
     city: cell(values, 7),
     state: cell(values, 8),
+    countryCode: cell(values, 26) || "US",
+    latitude: cell(values, 27) ? Number(cell(values, 27)) : null,
+    longitude: cell(values, 28) ? Number(cell(values, 28)) : null,
+    placeId: cell(values, 29),
     start: cell(values, 9),
     end: cell(values, 10),
     createdAt: cell(values, 1),
@@ -142,6 +158,9 @@ export function storedRequestFromValues(values: string[]): StoredVisitRequest {
     syncStatus: (cell(values, 18) || "not_started") as StoredVisitRequest["syncStatus"],
     syncAttempts: Number(cell(values, 20) || 0),
     syncError: cell(values, 21) || null,
+    lifecycleAction: (cell(values, 30) || "create") as StoredVisitRequest["lifecycleAction"],
+    lifecycleVersion: Number(cell(values, 31) || 1),
+    participantsSnapshot: (() => { try { const value = JSON.parse(cell(values, 32) || "[]"); return Array.isArray(value) ? value.map(String) : []; } catch { return []; } })(),
   };
 }
 
@@ -163,6 +182,8 @@ function initialValues(input: VisitRequestSubmission) {
     input.submissionId, now, now, "pending", input.tripType, input.cashUrl, input.cashAccountId,
     input.city, input.state, input.start, input.end, "", "", "", "", "", "", "",
     "not_started", "", "0", "", requestFingerprint(input), "", input.accountName,
+    input.fullAddress, input.countryCode, input.latitude == null ? "" : String(input.latitude),
+    input.longitude == null ? "" : String(input.longitude), input.placeId, "create", "1", "",
   ];
 }
 
@@ -177,8 +198,19 @@ async function sheetsFetch(path: string, init: RequestInit, fetchImpl: Fetch) {
   return response;
 }
 
+async function ensureRequestSchema(fetchImpl: Fetch) {
+  if (schemaEnsured) return;
+  const rangeName = `${REQUESTS_TAB}!A1:AG1`;
+  await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(rangeName)}?valueInputOption=RAW`,
+    { method: "PUT", body: JSON.stringify({ range: rangeName, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] }) },
+    fetchImpl,
+  );
+  schemaEnsured = true;
+}
+
 async function readRows(fetchImpl: Fetch = fetch) {
-  const range = encodeURIComponent(`${REQUESTS_TAB}!A2:Y10001`);
+  const range = encodeURIComponent(`${REQUESTS_TAB}!A2:AG10001`);
   const response = await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}?majorDimension=ROWS`,
     { method: "GET" },
@@ -189,7 +221,7 @@ async function readRows(fetchImpl: Fetch = fetch) {
 }
 
 async function appendValues(tab: string, values: string[], fetchImpl: Fetch) {
-  const range = encodeURIComponent(`${tab}!A:Z`);
+  const range = encodeURIComponent(`${tab}!A:AG`);
   await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ majorDimension: "ROWS", values: [values] }) },
@@ -198,7 +230,7 @@ async function appendValues(tab: string, values: string[], fetchImpl: Fetch) {
 }
 
 async function updateRow(row: RequestRow, fetchImpl: Fetch) {
-  const rangeName = `${REQUESTS_TAB}!A${row.rowNumber}:Y${row.rowNumber}`;
+  const rangeName = `${REQUESTS_TAB}!A${row.rowNumber}:AG${row.rowNumber}`;
   await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(rangeName)}?valueInputOption=RAW`,
     { method: "PUT", body: JSON.stringify({ range: rangeName, majorDimension: "ROWS", values: [row.values] }) },
@@ -225,6 +257,7 @@ async function appendAudit(requestId: string, actorEmail: string, action: string
 }
 
 export async function createVisitRequest(input: VisitRequestSubmission, fetchImpl: Fetch = fetch) {
+  await ensureRequestSchema(fetchImpl);
   const existing = await findCanonicalRow(input.submissionId, fetchImpl);
   const fingerprint = requestFingerprint(input);
   if (existing) {
@@ -238,6 +271,7 @@ export async function createVisitRequest(input: VisitRequestSubmission, fetchImp
 }
 
 export async function listVisitRequests(fetchImpl: Fetch = fetch) {
+  await ensureRequestSchema(fetchImpl);
   return canonicalRows(await readRows(fetchImpl))
     .map((row) => row.request)
     .sort((a, b) => Number(a.status !== "pending") - Number(b.status !== "pending") || b.createdAt.localeCompare(a.createdAt))
@@ -279,6 +313,85 @@ export async function denyVisitRequest(id: string, actorEmail: string, fetchImpl
   row.values[23] = "";
   await updateRow(row, fetchImpl);
   await appendAudit(id, actorEmail, "denied", {}, fetchImpl);
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
+}
+
+export async function recordVisitReschedule(
+  id: string,
+  input: Pick<VisitRequestSubmission, "fullAddress" | "city" | "state" | "countryCode" | "latitude" | "longitude" | "placeId" | "start" | "end">,
+  actorEmail: string,
+  fetchImpl: Fetch = fetch,
+) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row || !row.request.calendarEventId || row.request.status === "cancelled" || row.request.status === "denied") return null;
+  const now = new Date().toISOString();
+  row.values[2] = now;
+  row.values[7] = input.city;
+  row.values[8] = input.state;
+  row.values[9] = input.start;
+  row.values[10] = input.end;
+  row.values[18] = "awaiting_hubspot";
+  row.values[21] = "";
+  row.values[25] = input.fullAddress;
+  row.values[26] = input.countryCode;
+  row.values[27] = input.latitude == null ? "" : String(input.latitude);
+  row.values[28] = input.longitude == null ? "" : String(input.longitude);
+  row.values[29] = input.placeId;
+  row.values[30] = "reschedule";
+  row.values[31] = String(row.request.lifecycleVersion + 1);
+  await updateRow(row, fetchImpl);
+  await appendAudit(id, actorEmail, "rescheduled", {
+    start: input.start,
+    end: input.end,
+    fullAddress: input.fullAddress,
+    hubspotStatus: "pending",
+  }, fetchImpl);
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
+}
+
+export async function recordVisitCancellation(id: string, actorEmail: string, fetchImpl: Fetch = fetch) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row || !row.request.calendarEventId || row.request.status === "cancelled" || row.request.status === "denied") return null;
+  const now = new Date().toISOString();
+  row.values[2] = now;
+  row.values[3] = "cancelled";
+  row.values[12] = now;
+  row.values[13] = actorEmail;
+  row.values[18] = "awaiting_hubspot";
+  row.values[21] = "";
+  row.values[30] = "cancel";
+  row.values[31] = String(row.request.lifecycleVersion + 1);
+  await updateRow(row, fetchImpl);
+  await appendAudit(id, actorEmail, "cancelled", { hubspotStatus: "pending" }, fetchImpl);
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
+}
+
+export async function completeVisitLifecycleHubSpot(id: string, actorEmail: string, fetchImpl: Fetch = fetch) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row) return null;
+  row.values[2] = new Date().toISOString();
+  row.values[18] = "complete";
+  row.values[21] = "";
+  await updateRow(row, fetchImpl);
+  await appendAudit(id, actorEmail, `${row.request.lifecycleAction}_hubspot_synced`, {}, fetchImpl);
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
+}
+
+export async function recordParticipantChange(
+  id: string,
+  participants: string[],
+  actorEmail: string,
+  fetchImpl: Fetch = fetch,
+) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row || !row.request.calendarEventId || row.request.status === "cancelled") return null;
+  row.values[2] = new Date().toISOString();
+  row.values[18] = row.request.hubspotMeetingId ? "awaiting_hubspot" : row.values[18];
+  row.values[30] = "participants";
+  row.values[31] = String(row.request.lifecycleVersion + 1);
+  row.values[32] = JSON.stringify([...new Set(participants)].slice(0, 100));
+  await updateRow(row, fetchImpl);
+  await appendAudit(id, actorEmail, "participants_changed", { participants, hubspotStatus: "pending" }, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
@@ -401,7 +514,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
       body: JSON.stringify({
         valueInputOption: "RAW",
         data: [
-          { range: `${REQUESTS_TAB}!A1:Y1`, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] },
+          { range: `${REQUESTS_TAB}!A1:AG1`, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] },
           { range: `${AUDIT_TAB}!A1:F1`, majorDimension: "ROWS", values: [[...AUDIT_HEADERS]] },
         ],
       }),
@@ -413,4 +526,5 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
 
 export function clearGoogleSheetsTokenCacheForTests() {
   cachedToken = null;
+  schemaEnsured = false;
 }

@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
-import { databaseConfigured, denyVisitRequest, setVisitRequestAccountName } from "@/lib/db";
+import {
+  completeVisitLifecycleHubSpot,
+  databaseConfigured,
+  denyVisitRequest,
+  getVisitRequest,
+  recordVisitCancellation,
+  recordVisitReschedule,
+  setVisitRequestAccountName,
+} from "@/lib/db";
 import { ASSIGNEES } from "@/lib/types";
 import { ApprovalError, approveVisitRequest } from "@/lib/approve-request";
+import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/google-calendar";
+import { findVerifiedCompany, hubSpotConfigured, updateHubSpotMeetingLifecycle } from "@/lib/hubspot";
+import { validateVisitSubmission } from "@/lib/submissions";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getAdminSession();
@@ -11,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ message: "Invalid request ID." }, { status: 400 });
-  const body = (await request.json().catch(() => null)) as { action?: string; traveler?: string; accountName?: string } | null;
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   if (body?.action === "deny") {
     const denied = await denyVisitRequest(id, admin.email);
     if (!denied) return NextResponse.json({ message: "Only pending requests can be denied." }, { status: 409 });
@@ -46,5 +57,47 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       throw error;
     }
   }
-  return NextResponse.json({ message: "Select approve or deny." }, { status: 400 });
+  if (body?.action === "reschedule") {
+    const current = await getVisitRequest(id);
+    if (!current?.calendarEventId) return NextResponse.json({ message: "Only scheduled visits can be rescheduled." }, { status: 409 });
+    const parsed = validateVisitSubmission({
+      ...current,
+      ...body,
+      submissionId: current.id,
+      traveler: current.assignedTraveler,
+      tripType: current.tripType,
+      accountName: current.accountName,
+      cashUrl: current.cashUrl,
+    });
+    if (!parsed.ok) return NextResponse.json({ message: parsed.message }, { status: 400 });
+    await rescheduleCalendarEvent(current.calendarEventId, {
+      start: parsed.value.start,
+      endInclusive: parsed.value.end,
+      fullAddress: parsed.value.fullAddress,
+      latitude: parsed.value.latitude,
+      longitude: parsed.value.longitude,
+    });
+    let updated = await recordVisitReschedule(id, parsed.value, admin.email);
+    if (!updated) return NextResponse.json({ message: "The visit could not be rescheduled." }, { status: 409 });
+    if (hubSpotConfigured() && updated.hubspotMeetingId) {
+      const company = await findVerifiedCompany(updated.cashAccountId, updated.cashUrl);
+      await updateHubSpotMeetingLifecycle(updated, company, "reschedule");
+      updated = await completeVisitLifecycleHubSpot(id, admin.email) ?? updated;
+    }
+    return NextResponse.json({ request: updated, message: "Calendar updated and attendees notified. HubSpot update is queued until connected." });
+  }
+  if (body?.action === "cancel") {
+    const current = await getVisitRequest(id);
+    if (!current?.calendarEventId) return NextResponse.json({ message: "Only scheduled visits can be cancelled." }, { status: 409 });
+    await cancelCalendarEvent(current.calendarEventId);
+    let updated = await recordVisitCancellation(id, admin.email);
+    if (!updated) return NextResponse.json({ message: "The visit could not be cancelled." }, { status: 409 });
+    if (hubSpotConfigured() && updated.hubspotMeetingId) {
+      const company = await findVerifiedCompany(updated.cashAccountId, updated.cashUrl);
+      await updateHubSpotMeetingLifecycle(updated, company, "cancel");
+      updated = await completeVisitLifecycleHubSpot(id, admin.email) ?? updated;
+    }
+    return NextResponse.json({ request: updated, message: "Calendar event cancelled and attendees notified. HubSpot cancellation is queued until connected." });
+  }
+  return NextResponse.json({ message: "Select approve, deny, reschedule, or cancel." }, { status: 400 });
 }

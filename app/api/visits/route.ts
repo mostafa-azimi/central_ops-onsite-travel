@@ -59,18 +59,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const saved = await createVisitRequest({
-      submissionId: parsed.value.submissionId,
-      tripType: parsed.value.tripType,
-      accountName: parsed.value.accountName,
-      cashUrl: parsed.value.cashUrl,
-      cashAccountId: parsed.value.cashAccountId,
-      city: parsed.value.city,
-      state: parsed.value.state,
-      start: parsed.value.start,
-      end: parsed.value.end,
-    });
-    const approved = await approveVisitRequest(saved.id, parsed.value.traveler, admin.email);
+    const { traveler, ...requestSubmission } = parsed.value;
+    const saved = await createVisitRequest(requestSubmission);
+    const approved = await approveVisitRequest(saved.id, traveler, admin.email);
     return NextResponse.json({ request: approved }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "IDEMPOTENCY_CONFLICT") {

@@ -10,8 +10,13 @@ export type VisitSubmission = {
   accountName: string;
   cashUrl: string;
   cashAccountId: string;
+  fullAddress: string;
   city: string;
   state: string;
+  countryCode: string;
+  latitude: number | null;
+  longitude: number | null;
+  placeId: string;
   start: string;
   end: string;
 };
@@ -47,8 +52,14 @@ export function validateVisitSubmission(input: unknown) {
   const traveler = String(value.traveler ?? "");
   const accountName = normalizeAccountName(value.accountName);
   const cashUrl = String(value.cashUrl ?? "");
+  const fullAddress = String(value.fullAddress ?? "").trim().replace(/\s+/g, " ");
   const city = String(value.city ?? "").trim();
-  const state = String(value.state ?? "").trim().toUpperCase();
+  const rawState = String(value.state ?? value.region ?? "").trim();
+  const state = rawState.length === 2 ? rawState.toUpperCase() : rawState;
+  const countryCode = String(value.countryCode ?? "").trim().toUpperCase();
+  const latitudeValue = value.latitude === "" || value.latitude == null ? null : Number(value.latitude);
+  const longitudeValue = value.longitude === "" || value.longitude == null ? null : Number(value.longitude);
+  const placeId = String(value.placeId ?? "").trim();
   const start = String(value.start ?? "");
   const end = String(value.end ?? "");
 
@@ -56,8 +67,17 @@ export function validateVisitSubmission(input: unknown) {
   if (!TRIP_TYPES.includes(tripType as TripType)) return { ok: false as const, message: "Select a valid visit type." };
   if (!ASSIGNEES.includes(traveler as Assignee)) return { ok: false as const, message: "Select an approved traveler." };
   if (!accountName) return { ok: false as const, message: "Enter a valid account name." };
+  if (!fullAddress || fullAddress.length > 240) return { ok: false as const, message: "Enter a valid full address." };
   if (!city || city.length > 80) return { ok: false as const, message: "Enter a valid city." };
-  if (!/^[A-Z]{2}$/.test(state)) return { ok: false as const, message: "Enter a two-letter state code." };
+  if (!state || state.length > 100) return { ok: false as const, message: "Enter a valid state, province, or region." };
+  if (!/^[A-Z]{2}$/.test(countryCode)) return { ok: false as const, message: "Select a valid country." };
+  if ((latitudeValue == null) !== (longitudeValue == null)) return { ok: false as const, message: "Address coordinates are incomplete." };
+  if (latitudeValue != null && (!Number.isFinite(latitudeValue) || latitudeValue < -90 || latitudeValue > 90)) {
+    return { ok: false as const, message: "Address latitude is invalid." };
+  }
+  if (longitudeValue != null && (!Number.isFinite(longitudeValue) || longitudeValue < -180 || longitudeValue > 180)) {
+    return { ok: false as const, message: "Address longitude is invalid." };
+  }
   if (!isDateOnly(start) || !isDateOnly(end) || end < start) return { ok: false as const, message: "Enter a valid inclusive date range." };
   const cashMatch = /^https:\/\/cash\.shiphero\.com\/client\/([1-9]\d*)\/?$/.exec(cashUrl);
   if (!cashMatch) {
@@ -78,8 +98,13 @@ export function validateVisitSubmission(input: unknown) {
       accountName,
       cashUrl: canonicalCashUrl,
       cashAccountId,
+      fullAddress,
       city,
       state,
+      countryCode,
+      latitude: latitudeValue,
+      longitude: longitudeValue,
+      placeId,
       start,
       end,
     } satisfies VisitSubmission,
@@ -101,8 +126,13 @@ export function validateVisitRequest(input: unknown) {
     accountName: parsed.value.accountName,
     cashUrl: parsed.value.cashUrl,
     cashAccountId: parsed.value.cashAccountId,
+    fullAddress: parsed.value.fullAddress,
     city: parsed.value.city,
     state: parsed.value.state,
+    countryCode: parsed.value.countryCode,
+    latitude: parsed.value.latitude,
+    longitude: parsed.value.longitude,
+    placeId: parsed.value.placeId,
     start: parsed.value.start,
     end: parsed.value.end,
   };

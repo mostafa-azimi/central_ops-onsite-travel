@@ -22,3 +22,11 @@ export type TravelFeed = {
   refreshedAt: string;
   source: "live" | "snapshot";
 };
+
+export type EmployeeTravelEvent = TravelEvent & {
+  calendarEventId: string;
+  participants: string[];
+  joined: boolean;
+  latitude: number | null;
+  longitude: number | null;
+};

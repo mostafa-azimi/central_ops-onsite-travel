@@ -13,11 +13,13 @@ export type AdminSession = {
   name: string;
 };
 
+export type EmployeeSession = AdminSession;
+
 export function adminAuthConfigured() {
   return Boolean(process.env.GOOGLE_OIDC_CLIENT_ID && process.env.GOOGLE_OIDC_CLIENT_SECRET);
 }
 
-export async function verifyAdminToken(token: string | undefined): Promise<AdminSession | null> {
+export async function verifyEmployeeToken(token: string | undefined): Promise<EmployeeSession | null> {
   const clientId = process.env.GOOGLE_OIDC_CLIENT_ID;
   if (!clientId || !token) return null;
 
@@ -27,7 +29,8 @@ export async function verifyAdminToken(token: string | undefined): Promise<Admin
       issuer: GOOGLE_ISSUERS,
     });
     const email = typeof payload.email === "string" ? payload.email.toLowerCase() : "";
-    if (payload.email_verified !== true || !isAllowedAdminEmail(email)) return null;
+    const hostedDomain = typeof payload.hd === "string" ? payload.hd.toLowerCase() : "";
+    if (payload.email_verified !== true || hostedDomain !== "shiphero.com" || !email.endsWith("@shiphero.com")) return null;
     return {
       email,
       name: typeof payload.name === "string" ? payload.name : email,
@@ -35,6 +38,16 @@ export async function verifyAdminToken(token: string | undefined): Promise<Admin
   } catch {
     return null;
   }
+}
+
+export async function verifyAdminToken(token: string | undefined): Promise<AdminSession | null> {
+  const employee = await verifyEmployeeToken(token);
+  return employee && isAllowedAdminEmail(employee.email) ? employee : null;
+}
+
+export async function getEmployeeSession() {
+  const store = await cookies();
+  return verifyEmployeeToken(store.get(ADMIN_COOKIE)?.value);
 }
 
 export async function getAdminSession() {

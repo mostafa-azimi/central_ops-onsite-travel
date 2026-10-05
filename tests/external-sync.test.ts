@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createOrGetCalendarEvent, googleEventToPublic } from "@/lib/google-calendar";
+import { cancelCalendarEvent, createOrGetCalendarEvent, googleEventToPublic, rescheduleCalendarEvent, updateCalendarAttendance } from "@/lib/google-calendar";
 import { createOrGetHubSpotMeeting, findVerifiedCompany, meetingTimes } from "@/lib/hubspot";
 import { approvalConnectionError } from "@/lib/approve-request";
 import type { StoredVisitRequest } from "@/lib/db";
@@ -12,8 +12,13 @@ const request: StoredVisitRequest = {
   accountName: "GTI Properties",
   cashUrl: "https://cash.shiphero.com/client/100000",
   cashAccountId: "100000",
+  fullAddress: "123 Peachtree St NE, Atlanta, GA 30303, USA",
   city: "Atlanta",
   state: "GA",
+  countryCode: "US",
+  latitude: 33.77,
+  longitude: -84.38,
+  placeId: "test-place",
   start: "2026-10-05",
   end: "2026-10-07",
   status: "pending",
@@ -28,6 +33,9 @@ const request: StoredVisitRequest = {
   syncStatus: "syncing_calendar",
   syncError: null,
   syncAttempts: 1,
+  lifecycleAction: "create",
+  lifecycleVersion: 1,
+  participantsSnapshot: [],
 };
 
 test("approval connection status identifies only the missing service", () => {
@@ -163,6 +171,49 @@ test("Calendar recovery adds the assigned traveler without duplicating the event
   assert.match(String(patchCall?.url), /sendUpdates=all/);
   assert.deepEqual(JSON.parse(String(patchCall?.init?.body)).attendees, [{ email: "mike.azimi@shiphero.com" }]);
   assert.equal(calls.filter((call) => call.init?.method === "POST").length, 1);
+});
+
+test("verified employees can join and leave Calendar attendees with notifications", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.includes("oauth2.googleapis.com")) return Response.json({ access_token: "access", expires_in: 3600 });
+    if (init?.method === "PATCH") return Response.json({});
+    return Response.json({
+      id: "event123",
+      summary: "Mike Azimi: GTI",
+      attendees: [{ email: "mike.azimi@shiphero.com", displayName: "Mike Azimi" }],
+      extendedProperties: { private: { centralOpsRequestId: request.id } },
+    });
+  }) as typeof fetch;
+  const joined = await updateCalendarAttendance("event123", "alex.person@shiphero.com", "join", fakeFetch);
+  assert.equal(joined?.requestId, request.id);
+  assert.deepEqual(joined?.participants, ["Mike Azimi", "Alex Person"]);
+  const patch = calls.find((call) => call.init?.method === "PATCH");
+  assert.match(String(patch?.url), /sendUpdates=all/);
+  assert.deepEqual(JSON.parse(String(patch?.init?.body)).attendees.at(-1), { email: "alex.person@shiphero.com" });
+  await assert.rejects(updateCalendarAttendance("event123", "mike.azimi@shiphero.com", "leave", fakeFetch), /PRIMARY_TRAVELER/);
+});
+
+test("reschedule and cancellation notify Calendar attendees", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.includes("oauth2.googleapis.com")) return Response.json({ access_token: "access", expires_in: 3600 });
+    if (init?.method === "PATCH" || init?.method === "DELETE") return init.method === "DELETE" ? new Response(null, { status: 204 }) : Response.json({});
+    return Response.json({ id: "event123", summary: "Mike Azimi: GTI", extendedProperties: { private: {} } });
+  }) as typeof fetch;
+  await rescheduleCalendarEvent("event123", {
+    start: "2026-11-10", endInclusive: "2026-11-12", fullAddress: "1 King St, Toronto, ON, Canada", latitude: 43.65, longitude: -79.38,
+  }, fakeFetch);
+  await cancelCalendarEvent("event123", fakeFetch);
+  const patch = calls.find((call) => call.init?.method === "PATCH");
+  const payload = JSON.parse(String(patch?.init?.body));
+  assert.deepEqual(payload.end, { date: "2026-11-13" });
+  assert.equal(payload.location, "1 King St, Toronto, ON, Canada");
+  assert.ok(calls.some((call) => call.init?.method === "DELETE" && call.url.includes("sendUpdates=all")));
 });
 
 test("HubSpot company mapping requires one exact account and canonical CASH URL", async () => {

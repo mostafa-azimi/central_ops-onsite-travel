@@ -8,8 +8,13 @@ const valid = {
   traveler: "Mike Azimi",
   accountName: "GTI Properties",
   cashUrl: "https://cash.shiphero.com/client/100000",
+  fullAddress: "123 Peachtree St NE, Atlanta, GA 30303, USA",
   city: "Atlanta",
   state: "ga",
+  countryCode: "US",
+  latitude: 33.77,
+  longitude: -84.38,
+  placeId: "test-place",
   start: "2026-10-05",
   end: "2026-10-07",
 };
@@ -63,4 +68,22 @@ test("public requests cannot assign a traveler", () => {
   const assigned = validateVisitRequest(valid);
   assert.equal(assigned.ok, false);
   if (!assigned.ok) assert.match(assigned.message, /administrator/i);
+});
+
+test("accepts international regions and full structured addresses", () => {
+  const result = validateVisitSubmission({
+    ...valid,
+    fullAddress: "10 Downing Street, London SW1A 2AA, UK",
+    city: "London",
+    state: "Greater London",
+    countryCode: "gb",
+    latitude: 51.5034,
+    longitude: -0.1276,
+    placeId: "london-place",
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.countryCode, "GB");
+    assert.equal(result.value.state, "Greater London");
+  }
 });
