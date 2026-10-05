@@ -20,9 +20,19 @@ export function approvalConnectionsConfigured() {
   return googleCalendarConfigured() && hubSpotConfigured();
 }
 
+export function approvalConnectionError() {
+  const calendar = googleCalendarConfigured();
+  const hubSpot = hubSpotConfigured();
+  if (calendar && hubSpot) return null;
+  if (calendar) return "HubSpot write connection is not configured. Calendar is connected.";
+  if (hubSpot) return "Calendar write connection is not configured. HubSpot is connected.";
+  return "Calendar and HubSpot write connections are not configured.";
+}
+
 export async function approveVisitRequest(id: string, traveler: Assignee, actorEmail: string) {
-  if (!approvalConnectionsConfigured()) {
-    throw new ApprovalError("Calendar and HubSpot write connections are not configured.", "not_configured");
+  const connectionError = approvalConnectionError();
+  if (connectionError) {
+    throw new ApprovalError(connectionError, "not_configured");
   }
 
   const current = await getVisitRequest(id);

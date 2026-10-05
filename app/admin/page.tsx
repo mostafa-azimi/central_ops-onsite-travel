@@ -2,6 +2,8 @@ import Link from "next/link";
 import { adminAuthConfigured, getAdminSession, INITIAL_ADMIN_EMAIL } from "@/lib/admin-auth";
 import { databaseConfigured, listVisitRequests } from "@/lib/db";
 import { AdminDashboard } from "@/components/admin-dashboard";
+import { googleCalendarConfigured } from "@/lib/google-calendar";
+import { hubSpotConfigured } from "@/lib/hubspot";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +33,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   const hasDatabase = databaseConfigured();
   const requests = hasDatabase ? await listVisitRequests() : [];
+  const calendarReady = googleCalendarConfigured();
+  const hubSpotReady = hubSpotConfigured();
 
   return (
     <main className="admin-shell">
@@ -40,6 +44,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <form action="/api/auth/signout" method="post"><button className="filter" type="submit">Sign out</button></form>
         </div>
         {!hasDatabase && <div className="setup-note"><strong>Google Sheets storage pending</strong><span>Requests and approval actions remain unavailable until the private server-side Sheet is connected.</span></div>}
+        {hasDatabase && (
+          <div className={`submit-status ${calendarReady && hubSpotReady ? "success" : "working"}`} role="status">
+            Calendar: {calendarReady ? "connected" : "pending"} · HubSpot: {hubSpotReady ? "connected" : "pending"}
+          </div>
+        )}
         <p>Only signed-in, allowlisted administrators can approve, deny, assign a traveler, or directly schedule a visit.</p>
         {hasDatabase && <AdminDashboard initialRequests={requests} />}
         <Link href="/">View public travel</Link>

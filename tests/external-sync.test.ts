@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createOrGetCalendarEvent, googleEventToPublic } from "@/lib/google-calendar";
 import { createOrGetHubSpotMeeting, findVerifiedCompany, meetingTimes } from "@/lib/hubspot";
+import { approvalConnectionError } from "@/lib/approve-request";
 import type { StoredVisitRequest } from "@/lib/db";
 
 const request: StoredVisitRequest = {
@@ -27,6 +28,22 @@ const request: StoredVisitRequest = {
   syncError: null,
   syncAttempts: 1,
 };
+
+test("approval connection status identifies only the missing service", () => {
+  const originalHubSpot = process.env.HUBSPOT_ACCESS_TOKEN;
+  const originalClientId = process.env.GOOGLE_CALENDAR_CLIENT_ID;
+  const originalClientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
+  const originalRefresh = process.env.GOOGLE_CALENDAR_REFRESH_TOKEN;
+  process.env.GOOGLE_CALENDAR_CLIENT_ID = "calendar-client";
+  process.env.GOOGLE_CALENDAR_CLIENT_SECRET = "calendar-secret";
+  process.env.GOOGLE_CALENDAR_REFRESH_TOKEN = "calendar-refresh";
+  delete process.env.HUBSPOT_ACCESS_TOKEN;
+  assert.equal(approvalConnectionError(), "HubSpot write connection is not configured. Calendar is connected.");
+  if (originalHubSpot === undefined) delete process.env.HUBSPOT_ACCESS_TOKEN; else process.env.HUBSPOT_ACCESS_TOKEN = originalHubSpot;
+  if (originalClientId === undefined) delete process.env.GOOGLE_CALENDAR_CLIENT_ID; else process.env.GOOGLE_CALENDAR_CLIENT_ID = originalClientId;
+  if (originalClientSecret === undefined) delete process.env.GOOGLE_CALENDAR_CLIENT_SECRET; else process.env.GOOGLE_CALENDAR_CLIENT_SECRET = originalClientSecret;
+  if (originalRefresh === undefined) delete process.env.GOOGLE_CALENDAR_REFRESH_TOKEN; else process.env.GOOGLE_CALENDAR_REFRESH_TOKEN = originalRefresh;
+});
 
 test("Google event sanitizer excludes cancelled and non-allowlisted travel", () => {
   assert.equal(googleEventToPublic({

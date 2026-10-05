@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateVisitSubmission } from "@/lib/submissions";
 import { getAdminSession } from "@/lib/admin-auth";
-import { ApprovalError, approvalConnectionsConfigured, approveVisitRequest } from "@/lib/approve-request";
+import { ApprovalError, approvalConnectionError, approveVisitRequest } from "@/lib/approve-request";
 import { createVisitRequest, databaseConfigured } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -50,9 +50,10 @@ export async function POST(request: Request) {
   if (!databaseConfigured()) {
     return NextResponse.json({ message: "Request storage is not configured. No records were created." }, { status: 503 });
   }
-  if (!approvalConnectionsConfigured()) {
+  const connectionError = approvalConnectionError();
+  if (connectionError) {
     return NextResponse.json(
-      { message: "Calendar and HubSpot write connections are not configured. No records were created." },
+      { message: `${connectionError} No records were created.` },
       { status: 503 },
     );
   }
