@@ -203,7 +203,7 @@ export function TravelDashboard({ feed }: { feed: TravelFeed }) {
               <h2 id="submit-heading">Request a customer visit</h2>
               <p>An approved administrator reviews the request, assigns the traveler, and then creates the Calendar and HubSpot records.</p>
             </div>
-            <div className="setup-note"><strong>Request storage setup in progress</strong><span>The form validates now but will not report success until the request is saved durably.</span></div>
+            <div className="setup-note"><strong>Private request Sheet setup in progress</strong><span>The form validates now but will not report success until the request is saved durably.</span></div>
             <form className="visit-form" onSubmit={submitVisit}>
               <label><span>Visit type</span><select name="tripType" required defaultValue=""><option value="" disabled>Select a visit type</option><option>Onboarding</option><option>Central Ops onsite</option></select></label>
               <label className="full"><span>Customer link in CASH</span><input name="cashUrl" type="url" required placeholder="Paste the customer CASH link" /></label>

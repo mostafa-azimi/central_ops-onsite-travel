@@ -22,16 +22,21 @@ Traveler assignment, approval, denial, and direct scheduling live on `/admin`. G
 
 Google administrator sign-in requires a separate web OAuth client with redirect URI `https://cs-onsite-travel.vercel.app/api/auth/google/callback` and environment variables `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Additional administrators can be added explicitly through `ADMIN_ALLOWED_EMAILS`. Until OAuth and durable storage are configured, the public request and administrator actions fail closed and never return mock success.
 
-The approval path creates one all-day Calendar event without invitations and one HubSpot meeting associated to a deterministically resolved company. CASH account IDs map only through HubSpot company string property `account_id`; the lookup must return exactly one company and its `shiphero_cash__account_url` must match the canonical submitted URL. Calendar end dates are stored end-exclusive. A deterministic Google event ID and unique HubSpot meeting title make partial retries recoverable. The database persists synchronization state, external IDs, errors, decisions, and an audit record before an approval is marked complete.
+The approval path creates one all-day Calendar event without invitations and one HubSpot meeting associated to a deterministically resolved company. CASH account IDs map only through HubSpot company string property `account_id`; the lookup must return exactly one company and its `shiphero_cash__account_url` must match the canonical submitted URL. Calendar end dates are stored end-exclusive. A deterministic Google event ID and unique HubSpot meeting title make partial retries recoverable. The private Google Sheet persists synchronization state, external IDs, errors, decisions, and audit rows before an approval is marked complete. The public browser never receives the Sheet ID, OAuth credential, audit data, or raw rows.
 
 Required runtime configuration:
 
-- `DATABASE_URL` for the dedicated Postgres database initialized with `db/schema.sql`
+- `GOOGLE_SHEETS_CLIENT_ID`, `GOOGLE_SHEETS_CLIENT_SECRET`, and `GOOGLE_SHEETS_REFRESH_TOKEN` for a server-side OAuth grant limited to `drive.file`
+- `GOOGLE_SHEETS_SPREADSHEET_ID` for the private app-created request Sheet
 - `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, and `GOOGLE_CALENDAR_REFRESH_TOKEN` for server-side Calendar event read/write
 - `HUBSPOT_ACCESS_TOKEN` with company read and meeting-create permissions
 - `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` for administrator sign-in
 
 All credentials remain server-side. The application fails closed when any required connection is absent and never returns a mock write success.
+
+### Google Sheets storage limits
+
+This store is intentionally sized for a low-volume, single-administrator workflow. Stable submission IDs plus payload fingerprints make sequential retries idempotent, and deterministic Calendar and HubSpot identifiers make external-write retries recoverable. Google Sheets does not provide transactions, uniqueness constraints, or atomic compare-and-set operations. Two requests or approvals executing at exactly the same time can therefore race, and the request-row update and audit-row append are not atomic. Keep Mike as the sole administrator while this backend is in use. Move the workflow to a transactional database if concurrent administrators or higher volume become necessary.
 
 ## Local development
 

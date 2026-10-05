@@ -1,5 +1,24 @@
-import { neon } from "@neondatabase/serverless";
+import { createHash, randomUUID } from "node:crypto";
 import type { VisitRequestSubmission } from "@/lib/submissions";
+
+const SHEETS_API = "https://sheets.googleapis.com/v4";
+const TOKEN_URL = "https://oauth2.googleapis.com/token";
+const REQUESTS_TAB = "Requests";
+const AUDIT_TAB = "Audit";
+const REQUEST_COLUMN_COUNT = 24;
+type Fetch = typeof fetch;
+
+export const REQUEST_HEADERS = [
+  "id", "created_at", "updated_at", "status", "trip_type", "cash_url", "cash_account_id",
+  "city", "state", "start_date", "end_date_inclusive", "assigned_traveler", "decided_at",
+  "decided_by_email", "calendar_event_id", "calendar_event_url", "hubspot_meeting_id",
+  "hubspot_company_id", "sync_status", "sync_started_at", "sync_attempts", "sync_error",
+  "payload_fingerprint", "claim_token",
+] as const;
+
+export const AUDIT_HEADERS = [
+  "audit_id", "request_id", "created_at", "actor_email", "action", "details_json",
+] as const;
 
 export type StoredVisitRequest = VisitRequestSubmission & {
   id: string;
@@ -17,164 +36,340 @@ export type StoredVisitRequest = VisitRequestSubmission & {
   syncAttempts: number;
 };
 
+type RequestRow = {
+  rowNumber: number;
+  values: string[];
+  request: StoredVisitRequest;
+  fingerprint: string;
+  claimToken: string;
+  syncStartedAt: string;
+};
+
+let cachedToken: { value: string; expiresAt: number } | null = null;
+
 export function databaseConfigured() {
-  return Boolean(process.env.DATABASE_URL);
+  return Boolean(
+    process.env.GOOGLE_SHEETS_CLIENT_ID &&
+    process.env.GOOGLE_SHEETS_CLIENT_SECRET &&
+    process.env.GOOGLE_SHEETS_REFRESH_TOKEN &&
+    process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
+  );
 }
 
-function client() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_NOT_CONFIGURED");
-  return neon(url);
+function sheetsCredential() {
+  const clientId = process.env.GOOGLE_SHEETS_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_SHEETS_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_SHEETS_REFRESH_TOKEN;
+  if (!clientId || !clientSecret || !refreshToken) throw new Error("GOOGLE_SHEETS_NOT_CONFIGURED");
+  return { clientId, clientSecret, refreshToken };
 }
 
-function mapRow(row: Record<string, unknown>): StoredVisitRequest {
+function spreadsheetId() {
+  const id = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+  if (!id) throw new Error("GOOGLE_SHEETS_SPREADSHEET_NOT_CONFIGURED");
+  return id;
+}
+
+async function responseMessage(response: Response) {
+  const text = await response.text();
+  try {
+    const parsed = JSON.parse(text) as { error?: { message?: string }; error_description?: string };
+    return parsed.error?.message ?? parsed.error_description ?? `HTTP ${response.status}`;
+  } catch {
+    return `HTTP ${response.status}`;
+  }
+}
+
+async function accessToken(fetchImpl: Fetch = fetch) {
+  if (cachedToken && cachedToken.expiresAt > Date.now() + 60_000) return cachedToken.value;
+  const credential = sheetsCredential();
+  const response = await fetchImpl(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: credential.clientId,
+      client_secret: credential.clientSecret,
+      refresh_token: credential.refreshToken,
+      grant_type: "refresh_token",
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Google Sheets token refresh failed: ${await responseMessage(response)}`);
+  const body = (await response.json()) as { access_token?: string; expires_in?: number };
+  if (!body.access_token) throw new Error("Google Sheets token refresh returned no access token");
+  cachedToken = { value: body.access_token, expiresAt: Date.now() + Math.max(60, body.expires_in ?? 3600) * 1000 };
+  return body.access_token;
+}
+
+function cell(values: string[], index: number) {
+  return String(values[index] ?? "");
+}
+
+export function requestFingerprint(input: VisitRequestSubmission) {
+  return createHash("sha256").update(JSON.stringify({
+    tripType: input.tripType,
+    cashUrl: input.cashUrl,
+    cashAccountId: input.cashAccountId,
+    city: input.city,
+    state: input.state,
+    start: input.start,
+    end: input.end,
+  })).digest("hex");
+}
+
+export function storedRequestFromValues(values: string[]): StoredVisitRequest {
   return {
-    id: String(row.id),
-    submissionId: String(row.id),
-    status: String(row.status) as StoredVisitRequest["status"],
-    tripType: String(row.trip_type) as VisitRequestSubmission["tripType"],
-    cashUrl: String(row.cash_url),
-    cashAccountId: String(row.cash_account_id),
-    city: String(row.city),
-    state: String(row.state),
-    start: String(row.start_date).slice(0, 10),
-    end: String(row.end_date_inclusive).slice(0, 10),
-    createdAt: new Date(String(row.created_at)).toISOString(),
-    assignedTraveler: row.assigned_traveler ? String(row.assigned_traveler) : null,
-    decidedAt: row.decided_at ? new Date(String(row.decided_at)).toISOString() : null,
-    decidedByEmail: row.decided_by_email ? String(row.decided_by_email) : null,
-    calendarEventId: row.calendar_event_id ? String(row.calendar_event_id) : null,
-    hubspotMeetingId: row.hubspot_meeting_id ? String(row.hubspot_meeting_id) : null,
-    hubspotCompanyId: row.hubspot_company_id ? String(row.hubspot_company_id) : null,
-    calendarEventUrl: row.calendar_event_url ? String(row.calendar_event_url) : null,
-    syncStatus: String(row.sync_status) as StoredVisitRequest["syncStatus"],
-    syncError: row.sync_error ? String(row.sync_error) : null,
-    syncAttempts: Number(row.sync_attempts ?? 0),
+    id: cell(values, 0),
+    submissionId: cell(values, 0),
+    status: (cell(values, 3) || "pending") as StoredVisitRequest["status"],
+    tripType: cell(values, 4) as VisitRequestSubmission["tripType"],
+    cashUrl: cell(values, 5),
+    cashAccountId: cell(values, 6),
+    city: cell(values, 7),
+    state: cell(values, 8),
+    start: cell(values, 9),
+    end: cell(values, 10),
+    createdAt: cell(values, 1),
+    assignedTraveler: cell(values, 11) || null,
+    decidedAt: cell(values, 12) || null,
+    decidedByEmail: cell(values, 13) || null,
+    calendarEventId: cell(values, 14) || null,
+    calendarEventUrl: cell(values, 15) || null,
+    hubspotMeetingId: cell(values, 16) || null,
+    hubspotCompanyId: cell(values, 17) || null,
+    syncStatus: (cell(values, 18) || "not_started") as StoredVisitRequest["syncStatus"],
+    syncAttempts: Number(cell(values, 20) || 0),
+    syncError: cell(values, 21) || null,
   };
 }
 
-export async function createVisitRequest(input: VisitRequestSubmission) {
-  const sql = client();
-  const rows = await sql`
-    INSERT INTO visit_requests (
-      id, trip_type, cash_url, cash_account_id, city, state, start_date, end_date_inclusive
-    ) VALUES (
-      ${input.submissionId}, ${input.tripType}, ${input.cashUrl}, ${input.cashAccountId},
-      ${input.city}, ${input.state}, ${input.start}, ${input.end}
-    )
-    ON CONFLICT (id) DO UPDATE SET id = visit_requests.id
-    RETURNING *
-  `;
-  const saved = mapRow(rows[0] as Record<string, unknown>);
-  if (
-    saved.tripType !== input.tripType || saved.cashUrl !== input.cashUrl ||
-    saved.cashAccountId !== input.cashAccountId || saved.city !== input.city ||
-    saved.state !== input.state || saved.start !== input.start || saved.end !== input.end
-  ) {
-    throw new Error("IDEMPOTENCY_CONFLICT");
+function requestRow(values: string[], rowNumber: number): RequestRow {
+  const padded = Array.from({ length: REQUEST_COLUMN_COUNT }, (_, index) => cell(values, index));
+  return {
+    rowNumber,
+    values: padded,
+    request: storedRequestFromValues(padded),
+    fingerprint: cell(padded, 22),
+    claimToken: cell(padded, 23),
+    syncStartedAt: cell(padded, 19),
+  };
+}
+
+function initialValues(input: VisitRequestSubmission) {
+  const now = new Date().toISOString();
+  return [
+    input.submissionId, now, now, "pending", input.tripType, input.cashUrl, input.cashAccountId,
+    input.city, input.state, input.start, input.end, "", "", "", "", "", "", "",
+    "not_started", "", "0", "", requestFingerprint(input), "",
+  ];
+}
+
+async function sheetsFetch(path: string, init: RequestInit, fetchImpl: Fetch) {
+  const token = await accessToken(fetchImpl);
+  const response = await fetchImpl(`${SHEETS_API}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init.headers },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Google Sheets request failed: ${await responseMessage(response)}`);
+  return response;
+}
+
+async function readRows(fetchImpl: Fetch = fetch) {
+  const range = encodeURIComponent(`${REQUESTS_TAB}!A2:X10001`);
+  const response = await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}?majorDimension=ROWS`,
+    { method: "GET" },
+    fetchImpl,
+  );
+  const body = (await response.json()) as { values?: string[][] };
+  return (body.values ?? []).map((values, index) => requestRow(values, index + 2)).filter((row) => row.request.id);
+}
+
+async function appendValues(tab: string, values: string[], fetchImpl: Fetch) {
+  const range = encodeURIComponent(`${tab}!A:Z`);
+  await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    { method: "POST", body: JSON.stringify({ majorDimension: "ROWS", values: [values] }) },
+    fetchImpl,
+  );
+}
+
+async function updateRow(row: RequestRow, fetchImpl: Fetch) {
+  const rangeName = `${REQUESTS_TAB}!A${row.rowNumber}:X${row.rowNumber}`;
+  await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(rangeName)}?valueInputOption=RAW`,
+    { method: "PUT", body: JSON.stringify({ range: rangeName, majorDimension: "ROWS", values: [row.values] }) },
+    fetchImpl,
+  );
+}
+
+function canonicalRows(rows: RequestRow[]) {
+  const byId = new Map<string, RequestRow>();
+  for (const row of rows) if (!byId.has(row.request.id)) byId.set(row.request.id, row);
+  return [...byId.values()];
+}
+
+async function findCanonicalRow(id: string, fetchImpl: Fetch) {
+  const matches = (await readRows(fetchImpl)).filter((row) => row.request.id === id);
+  if (new Set(matches.map((row) => row.fingerprint)).size > 1) throw new Error("IDEMPOTENCY_CONFLICT");
+  return matches[0] ?? null;
+}
+
+async function appendAudit(requestId: string, actorEmail: string, action: string, details: object, fetchImpl: Fetch) {
+  await appendValues(AUDIT_TAB, [
+    randomUUID(), requestId, new Date().toISOString(), actorEmail, action, JSON.stringify(details),
+  ], fetchImpl);
+}
+
+export async function createVisitRequest(input: VisitRequestSubmission, fetchImpl: Fetch = fetch) {
+  const existing = await findCanonicalRow(input.submissionId, fetchImpl);
+  const fingerprint = requestFingerprint(input);
+  if (existing) {
+    if (existing.fingerprint !== fingerprint) throw new Error("IDEMPOTENCY_CONFLICT");
+    return existing.request;
   }
-  return saved;
+  await appendValues(REQUESTS_TAB, initialValues(input), fetchImpl);
+  const saved = await findCanonicalRow(input.submissionId, fetchImpl);
+  if (!saved || saved.fingerprint !== fingerprint) throw new Error("SHEETS_WRITE_VERIFICATION_FAILED");
+  return saved.request;
 }
 
-export async function listVisitRequests() {
-  const sql = client();
-  const rows = await sql`
-    SELECT * FROM visit_requests
-    ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, created_at DESC
-    LIMIT 250
-  `;
-  return rows.map((row) => mapRow(row as Record<string, unknown>));
+export async function listVisitRequests(fetchImpl: Fetch = fetch) {
+  return canonicalRows(await readRows(fetchImpl))
+    .map((row) => row.request)
+    .sort((a, b) => Number(a.status !== "pending") - Number(b.status !== "pending") || b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 250);
 }
 
-export async function getVisitRequest(id: string) {
-  const sql = client();
-  const rows = await sql`SELECT * FROM visit_requests WHERE id = ${id}::uuid LIMIT 1`;
-  return rows.length === 1 ? mapRow(rows[0] as Record<string, unknown>) : null;
+export async function getVisitRequest(id: string, fetchImpl: Fetch = fetch) {
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
-export async function denyVisitRequest(id: string, actorEmail: string) {
-  const sql = client();
-  const rows = await sql`
-    WITH updated AS (
-      UPDATE visit_requests
-      SET status = 'denied', decided_at = now(), decided_by_email = ${actorEmail}, updated_at = now()
-      WHERE id = ${id}::uuid AND status = 'pending'
-      RETURNING *
-    ), audited AS (
-      INSERT INTO visit_request_audit (request_id, actor_email, action)
-      SELECT id, ${actorEmail}, 'denied' FROM updated
-      RETURNING request_id
-    )
-    SELECT updated.* FROM updated, audited WHERE audited.request_id = updated.id
-  `;
-  if (rows.length !== 1) return null;
-  return mapRow(rows[0] as Record<string, unknown>);
+export async function denyVisitRequest(id: string, actorEmail: string, fetchImpl: Fetch = fetch) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row || row.request.status !== "pending") return null;
+  const now = new Date().toISOString();
+  row.values[2] = now;
+  row.values[3] = "denied";
+  row.values[12] = now;
+  row.values[13] = actorEmail;
+  row.values[23] = "";
+  await updateRow(row, fetchImpl);
+  await appendAudit(id, actorEmail, "denied", {}, fetchImpl);
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
-export async function claimVisitRequestApproval(id: string, traveler: string) {
-  const sql = client();
-  const rows = await sql`
-    UPDATE visit_requests
-    SET assigned_traveler = COALESCE(assigned_traveler, ${traveler}),
-        sync_status = CASE WHEN calendar_event_id IS NULL THEN 'syncing_calendar' ELSE 'syncing_hubspot' END,
-        sync_started_at = now(), sync_attempts = sync_attempts + 1, sync_error = NULL, updated_at = now()
-    WHERE id = ${id}::uuid
-      AND status = 'pending'
-      AND (assigned_traveler IS NULL OR assigned_traveler = ${traveler})
-      AND (
-        sync_status IN ('not_started', 'failed')
-        OR (sync_status IN ('syncing_calendar', 'syncing_hubspot') AND sync_started_at < now() - interval '15 minutes')
-      )
-    RETURNING *
-  `;
-  return rows.length === 1 ? mapRow(rows[0] as Record<string, unknown>) : null;
+export async function claimVisitRequestApproval(id: string, traveler: string, fetchImpl: Fetch = fetch) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row || row.request.status !== "pending") return null;
+  if (row.request.assignedTraveler && row.request.assignedTraveler !== traveler) return null;
+  const stale = row.syncStartedAt && Date.now() - new Date(row.syncStartedAt).getTime() > 15 * 60 * 1000;
+  if (!["not_started", "failed"].includes(row.request.syncStatus) && !stale) return null;
+
+  const now = new Date().toISOString();
+  const claimToken = randomUUID();
+  row.values[2] = now;
+  row.values[11] = traveler;
+  row.values[18] = row.request.calendarEventId ? "syncing_hubspot" : "syncing_calendar";
+  row.values[19] = now;
+  row.values[20] = String(row.request.syncAttempts + 1);
+  row.values[21] = "";
+  row.values[23] = claimToken;
+  await updateRow(row, fetchImpl);
+  const verified = await findCanonicalRow(id, fetchImpl);
+  return verified?.claimToken === claimToken ? verified.request : null;
 }
 
-export async function saveCalendarResult(id: string, eventId: string, eventUrl: string, companyId: string) {
-  const sql = client();
-  const rows = await sql`
-    UPDATE visit_requests
-    SET calendar_event_id = ${eventId}, calendar_event_url = ${eventUrl},
-        hubspot_company_id = ${companyId}, sync_status = 'syncing_hubspot', updated_at = now()
-    WHERE id = ${id}::uuid AND status = 'pending'
-    RETURNING *
-  `;
-  return rows.length === 1 ? mapRow(rows[0] as Record<string, unknown>) : null;
+export async function saveCalendarResult(
+  id: string,
+  eventId: string,
+  eventUrl: string,
+  companyId: string,
+  fetchImpl: Fetch = fetch,
+) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row || row.request.status !== "pending") return null;
+  row.values[2] = new Date().toISOString();
+  row.values[14] = eventId;
+  row.values[15] = eventUrl;
+  row.values[17] = companyId;
+  row.values[18] = "syncing_hubspot";
+  await updateRow(row, fetchImpl);
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
-export async function failVisitRequestApproval(id: string, error: string) {
-  const sql = client();
-  await sql`
-    UPDATE visit_requests
-    SET sync_status = 'failed', sync_error = ${error.slice(0, 500)}, sync_started_at = NULL, updated_at = now()
-    WHERE id = ${id}::uuid AND status = 'pending'
-  `;
+export async function failVisitRequestApproval(id: string, error: string, fetchImpl: Fetch = fetch) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row || row.request.status !== "pending") return;
+  row.values[2] = new Date().toISOString();
+  row.values[18] = "failed";
+  row.values[19] = "";
+  row.values[21] = error.slice(0, 500);
+  row.values[23] = "";
+  await updateRow(row, fetchImpl);
 }
 
 export async function completeVisitRequestApproval(
   id: string,
   actorEmail: string,
   hubspotMeetingId: string,
+  fetchImpl: Fetch = fetch,
 ) {
-  const sql = client();
-  const rows = await sql`
-    WITH updated AS (
-      UPDATE visit_requests
-      SET status = 'approved', hubspot_meeting_id = ${hubspotMeetingId}, sync_status = 'complete',
-          sync_error = NULL, sync_started_at = NULL, decided_at = now(),
-          decided_by_email = ${actorEmail}, updated_at = now()
-      WHERE id = ${id}::uuid AND status = 'pending' AND calendar_event_id IS NOT NULL
-      RETURNING *
-    ), audited AS (
-      INSERT INTO visit_request_audit (request_id, actor_email, action, details)
-      SELECT id, ${actorEmail}, 'approved', jsonb_build_object(
-        'traveler', assigned_traveler,
-        'calendar_event_id', calendar_event_id,
-        'hubspot_meeting_id', hubspot_meeting_id
-      ) FROM updated
-      RETURNING request_id
-    )
-    SELECT updated.* FROM updated, audited WHERE audited.request_id = updated.id
-  `;
-  return rows.length === 1 ? mapRow(rows[0] as Record<string, unknown>) : null;
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row || row.request.status !== "pending" || !row.request.calendarEventId) return null;
+  const now = new Date().toISOString();
+  row.values[2] = now;
+  row.values[3] = "approved";
+  row.values[12] = now;
+  row.values[13] = actorEmail;
+  row.values[16] = hubspotMeetingId;
+  row.values[18] = "complete";
+  row.values[19] = "";
+  row.values[21] = "";
+  row.values[23] = "";
+  await updateRow(row, fetchImpl);
+  await appendAudit(id, actorEmail, "approved", {
+    traveler: row.values[11], calendarEventId: row.values[14], hubspotMeetingId,
+  }, fetchImpl);
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
+}
+
+export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) {
+  const token = await accessToken(fetchImpl);
+  const response = await fetchImpl(`${SHEETS_API}/spreadsheets`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      properties: { title: "Central Ops Travel Requests" },
+      sheets: [
+        { properties: { title: REQUESTS_TAB, gridProperties: { frozenRowCount: 1 } } },
+        { properties: { title: AUDIT_TAB, gridProperties: { frozenRowCount: 1 } } },
+      ],
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Google Sheet creation failed: ${await responseMessage(response)}`);
+  const body = (await response.json()) as { spreadsheetId?: string };
+  if (!body.spreadsheetId) throw new Error("Google Sheet creation returned no spreadsheet ID");
+  process.env.GOOGLE_SHEETS_SPREADSHEET_ID = body.spreadsheetId;
+  await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(body.spreadsheetId)}/values:batchUpdate`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        valueInputOption: "RAW",
+        data: [
+          { range: `${REQUESTS_TAB}!A1:X1`, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] },
+          { range: `${AUDIT_TAB}!A1:F1`, majorDimension: "ROWS", values: [[...AUDIT_HEADERS]] },
+        ],
+      }),
+    },
+    fetchImpl,
+  );
+  return body.spreadsheetId;
+}
+
+export function clearGoogleSheetsTokenCacheForTests() {
+  cachedToken = null;
 }

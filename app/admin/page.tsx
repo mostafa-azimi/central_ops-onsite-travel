@@ -39,7 +39,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <div><p className="eyebrow">Signed in as {session.email}</p><h1>Travel approvals</h1></div>
           <form action="/api/auth/signout" method="post"><button className="filter" type="submit">Sign out</button></form>
         </div>
-        {!hasDatabase && <div className="setup-note"><strong>Database setup pending</strong><span>Requests and approval actions remain unavailable until durable storage is connected.</span></div>}
+        {!hasDatabase && <div className="setup-note"><strong>Google Sheets storage pending</strong><span>Requests and approval actions remain unavailable until the private server-side Sheet is connected.</span></div>}
         <p>Only signed-in, allowlisted administrators can approve, deny, assign a traveler, or directly schedule a visit.</p>
         {hasDatabase && <AdminDashboard initialRequests={requests} />}
         <Link href="/">View public travel</Link>
