@@ -23,5 +23,5 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
     );
   }
   const events = googleCalendarConfigured() ? await fetchEmployeeTravelEvents(employee.email) : [];
-  return <TravelMap employee={employee} initialEvents={events} apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""} />;
+  return <TravelMap employee={employee} initialEvents={events} />;
 }

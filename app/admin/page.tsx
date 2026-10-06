@@ -50,7 +50,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           </div>
         )}
         <p>Only signed-in, allowlisted administrators can approve, deny, assign a traveler, or directly schedule a visit.</p>
-        {hasDatabase && <AdminDashboard initialRequests={requests} mapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""} />}
+        {hasDatabase && <AdminDashboard initialRequests={requests} />}
         <Link href="/">View public travel</Link>
       </section>
     </main>

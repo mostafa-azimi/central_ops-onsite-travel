@@ -61,11 +61,9 @@ function durationLabel(start: string, end: string, allDay: boolean) {
 export function TravelDashboard({
   feed,
   requestStorageConfigured,
-  mapsApiKey,
 }: {
   feed: TravelFeed;
   requestStorageConfigured: boolean;
-  mapsApiKey: string;
 }) {
   const [view, setView] = useState<"schedule" | "submit">("schedule");
   const [query, setQuery] = useState("");
@@ -226,7 +224,7 @@ export function TravelDashboard({
               <label><span>Visit type</span><select name="tripType" required defaultValue=""><option value="" disabled>Select a visit type</option><option>Onboarding</option><option>Central Ops onsite</option></select></label>
               <label className="full"><span>Account name</span><input name="accountName" required maxLength={120} placeholder="Customer account name" autoComplete="organization" /></label>
               <label className="full"><span>Customer link in CASH</span><input name="cashUrl" type="url" required placeholder="Paste the customer CASH link" /></label>
-              <AddressFields apiKey={mapsApiKey} />
+              <AddressFields />
               <label><span>Start date</span><input name="start" type="date" required onChange={(event) => setFormStart(event.target.value)} /></label>
               <label><span>End date</span><input name="end" type="date" required min={formStart || undefined} /></label>
               <div className="form-actions full">

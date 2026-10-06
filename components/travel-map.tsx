@@ -3,18 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { EmployeeSession } from "@/lib/admin-auth";
+import type { AddressSuggestion } from "@/lib/geocoding";
 import type { EmployeeTravelEvent } from "@/lib/types";
-import { loadGoogleMaps } from "@/components/address-fields";
 
 type Coordinate = { lat: number; lng: number };
-type MapsApi = {
-  Map: new (element: HTMLElement, options: object) => { fitBounds(bounds: object, padding?: number): void };
-  Marker: new (options: object) => { addListener(name: string, callback: () => void): void };
-  InfoWindow: new (options: object) => { open(options: object): void };
-  LatLngBounds: new () => { extend(position: Coordinate): void };
-  Geocoder: new () => { geocode(request: object, callback: (results: Array<{ geometry: { location: { lat(): number; lng(): number } } }> | null, status: string) => void): void };
-};
-type MapsWindow = Window & { google?: { maps: MapsApi } };
 
 function dateRange(event: EmployeeTravelEvent) {
   const formatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: event.allDay ? "UTC" : "America/New_York" });
@@ -30,61 +22,60 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
 }
 
+async function eventCoordinate(event: EmployeeTravelEvent): Promise<Coordinate | null> {
+  if (event.latitude != null && event.longitude != null) return { lat: event.latitude, lng: event.longitude };
+  if (!event.location) return null;
+  try {
+    const response = await fetch(`/api/geocode?q=${encodeURIComponent(event.location)}`);
+    if (!response.ok) return null;
+    const body = (await response.json()) as { suggestions?: AddressSuggestion[] };
+    const first = body.suggestions?.[0];
+    return first ? { lat: first.latitude, lng: first.longitude } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function TravelMap({
   employee,
   initialEvents,
-  apiKey,
 }: {
   employee: EmployeeSession;
   initialEvents: EmployeeTravelEvent[];
-  apiKey: string;
 }) {
   const mapElement = useRef<HTMLDivElement>(null);
   const [workingId, setWorkingId] = useState("");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (!apiKey || !mapElement.current) return;
+    if (!mapElement.current) return;
     let active = true;
-    void loadGoogleMaps(apiKey).then(async () => {
+    let destroy: (() => void) | undefined;
+    void import("leaflet").then(async (leafletModule) => {
       if (!active || !mapElement.current) return;
-      const maps = (window as MapsWindow).google?.maps;
-      if (!maps) return;
-      const map = new maps.Map(mapElement.current, {
-        center: { lat: 43, lng: -101 },
-        zoom: 3,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: true,
-      });
-      const bounds = new maps.LatLngBounds();
-      const geocoder = new maps.Geocoder();
-      let markerCount = 0;
-      for (const event of initialEvents) {
-        let position: Coordinate | null = event.latitude != null && event.longitude != null
-          ? { lat: event.latitude, lng: event.longitude }
-          : null;
-        if (!position && event.location) {
-          position = await new Promise<Coordinate | null>((resolve) => {
-            geocoder.geocode({ address: event.location }, (results, status) => {
-              const location = status === "OK" ? results?.[0]?.geometry.location : null;
-              resolve(location ? { lat: location.lat(), lng: location.lng() } : null);
-            });
-          });
-        }
-        if (!active || !position) continue;
-        const marker = new maps.Marker({ map, position, title: `${event.customer}: ${event.participants.join(", ")}` });
-        const info = new maps.InfoWindow({
-          content: `<div class="map-popup"><strong>${escapeHtml(event.customer)}</strong><br>${escapeHtml(event.location)}<br><span>${escapeHtml(event.participants.join(", "))}</span></div>`,
-        });
-        marker.addListener("click", () => info.open({ anchor: marker, map }));
-        bounds.extend(position);
-        markerCount += 1;
+      const L = leafletModule.default;
+      const map = L.map(mapElement.current, { scrollWheelZoom: false, worldCopyJump: true }).setView([43, -101], 3);
+      destroy = () => map.remove();
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+      }).addTo(map);
+      const points = await Promise.all(initialEvents.map(async (event) => ({ event, position: await eventCoordinate(event) })));
+      if (!active) return;
+      const bounds = L.latLngBounds([]);
+      for (const { event, position } of points) {
+        if (!position) continue;
+        const marker = L.marker([position.lat, position.lng], {
+          title: `${event.customer}: ${event.participants.join(", ")}`,
+          icon: L.divIcon({ className: "travel-pin", html: '<span aria-hidden="true"></span>', iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -32] }),
+        }).addTo(map);
+        marker.bindPopup(`<div class="map-popup"><strong>${escapeHtml(event.customer)}</strong><br>${escapeHtml(event.location)}<br><span>${escapeHtml(event.participants.join(", "))}</span></div>`);
+        bounds.extend([position.lat, position.lng]);
       }
-      if (markerCount > 0) map.fitBounds(bounds, 70);
+      if (bounds.isValid()) map.fitBounds(bounds.pad(0.18), { maxZoom: 7 });
     }).catch(() => setMessage("The interactive map could not load. The visit list is still available."));
-    return () => { active = false; };
-  }, [apiKey, initialEvents]);
+    return () => { active = false; destroy?.(); };
+  }, [initialEvents]);
 
   async function attendance(event: EmployeeTravelEvent) {
     setWorkingId(event.calendarEventId);
@@ -111,12 +102,9 @@ export function TravelMap({
         <div className="map-account"><span>{employee.name}</span><form action="/api/auth/signout" method="post"><button className="filter" type="submit">Sign out</button></form></div>
       </header>
       <nav className="map-nav"><Link href="/">Public schedule</Link><Link href="/admin">Admin approvals</Link></nav>
-      {!apiKey && <div className="setup-note"><strong>Interactive map setup pending</strong><span>The employee-only visit list and Calendar join controls work now. Google Maps and address autocomplete need the restricted Maps key.</span></div>}
       {message && <div className="submit-status error" role="status">{message}</div>}
       <section className="map-layout">
-        <div ref={mapElement} className={apiKey ? "travel-map" : "travel-map map-placeholder"} aria-label="Interactive customer visit map">
-          {!apiKey && <p>Map activates after Google Maps Platform setup.</p>}
-        </div>
+        <div ref={mapElement} className="travel-map" aria-label="Interactive customer visit map" />
         <div className="map-visits">
           <div className="map-visits-heading"><h2>{initialEvents.length} active {initialEvents.length === 1 ? "visit" : "visits"}</h2><p>North America is the default view. Other regions appear automatically when active.</p></div>
           {initialEvents.map((event) => (

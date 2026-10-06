@@ -5,7 +5,7 @@ import { ASSIGNEES } from "@/lib/types";
 import type { StoredVisitRequest } from "@/lib/db";
 import { AddressFields } from "@/components/address-fields";
 
-export function AdminDashboard({ initialRequests, mapsApiKey }: { initialRequests: StoredVisitRequest[]; mapsApiKey: string }) {
+export function AdminDashboard({ initialRequests }: { initialRequests: StoredVisitRequest[] }) {
   const [requests, setRequests] = useState(initialRequests);
   const [message, setMessage] = useState("");
   const [confirmCancelId, setConfirmCancelId] = useState("");
@@ -92,7 +92,7 @@ export function AdminDashboard({ initialRequests, mapsApiKey }: { initialRequest
           <article className="scheduled-card" key={request.id}>
             <div className="scheduled-summary"><div><h3>{request.accountName}</h3><p>{request.assignedTraveler} · {request.fullAddress} · {request.start} to {request.end}</p></div>{request.calendarEventUrl && <a href={request.calendarEventUrl} target="_blank" rel="noreferrer">Calendar event</a>}</div>
             <details><summary>Reschedule visit</summary><form className="visit-form reschedule-form" onSubmit={(event) => void reschedule(request.id, event)}>
-              <AddressFields apiKey={mapsApiKey} />
+              <AddressFields />
               <label><span>Start date</span><input name="start" type="date" required defaultValue={request.start} /></label>
               <label><span>End date</span><input name="end" type="date" required defaultValue={request.end} /></label>
               <div className="form-actions full"><button className="btn-primary" type="submit">Save reschedule</button><span>Calendar attendees will receive an update.</span></div>

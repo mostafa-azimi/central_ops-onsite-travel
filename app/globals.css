@@ -127,8 +127,10 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .field-note, .field-error { margin: -8px 0 0; font-size: .82rem; }
 .field-note { color: var(--body); }
 .field-error { color: #aa2525; }
-.autocomplete-host { min-height: 48px; }
-.google-address-autocomplete { width: 100%; color-scheme: light; }
+.address-search { position: relative; z-index: 4; }
+.address-suggestions { position: absolute; top: calc(100% - 1px); right: 0; left: 0; z-index: 20; max-height: 260px; overflow-y: auto; margin: 0; padding: 5px; border: 1px solid var(--gray); border-radius: 6px; background: var(--white); box-shadow: 0 12px 30px rgba(38, 52, 68, .16); list-style: none; }
+.address-suggestions button { width: 100%; padding: 10px; border: 0; border-radius: 5px; background: transparent; color: var(--navy); cursor: pointer; text-align: left; }
+.address-suggestions button:hover, .address-suggestions button:focus { background: var(--blue-50); outline: none; }
 .visit-form select, .visit-form input { width: 100%; height: 46px; padding: 0 12px; border: 1px solid var(--gray); border-radius: 6px; color: var(--navy); background: var(--white); }
 .visit-form select:focus, .visit-form input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(50, 129, 253, .16); outline: none; }
 .form-actions { display: flex; gap: 16px; align-items: center; margin-top: 4px; }
@@ -171,7 +173,10 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .map-nav a { color: var(--blue); font-weight: 800; }
 .map-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(340px, .75fr); gap: 20px; min-height: 650px; }
 .travel-map { min-height: 650px; overflow: hidden; border: 1px solid var(--blue-100); border-radius: 8px; background: var(--blue-50); }
-.map-placeholder { display: grid; place-items: center; color: var(--body); font-weight: 700; }
+.travel-pin { background: transparent; }
+.travel-pin span { display: block; width: 28px; height: 28px; border: 4px solid var(--white); border-radius: 50% 50% 50% 0; background: var(--red); box-shadow: 0 3px 10px rgba(38, 52, 68, .35); transform: rotate(-45deg); }
+.leaflet-container { font-family: "Figtree", "Segoe UI", "Helvetica Neue", Helvetica, sans-serif; }
+.leaflet-control-attribution { font-size: .68rem; }
 .map-visits { max-height: 650px; overflow: auto; padding-right: 4px; }
 .map-visits-heading { margin-bottom: 14px; }
 .map-visits-heading p { margin: 6px 0 0; color: var(--body); font-size: .86rem; }
