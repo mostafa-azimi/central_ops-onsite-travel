@@ -13,7 +13,7 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
       <main className="admin-shell">
         <section className="admin-card">
           <p className="eyebrow">ShipHero employees</p>
-          <h1>Team travel map</h1>
+          <h1>Map view</h1>
           <p>Sign in with a verified @shiphero.com Google account to view traveler names and join a customer visit.</p>
           {error && <div className="submit-status error">Use a verified @shiphero.com Google account.</div>}
           {adminAuthConfigured() && <a className="btn-primary admin-signin" href="/api/auth/google/start?returnTo=/map">Sign in with Google</a>}

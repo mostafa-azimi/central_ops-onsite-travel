@@ -98,10 +98,10 @@ export function TravelMap({
   return (
     <main className="map-shell">
       <header className="map-header">
-        <div><p className="eyebrow">ShipHero employee view</p><h1>Team travel map</h1><p>See active visits, who is going, and add yourself to the Calendar invite.</p></div>
+        <div><p className="eyebrow">ShipHero employee view</p><h1>Map view</h1><p>See active visits, who is going, and add yourself to the Calendar invite.</p></div>
         <div className="map-account"><span>{employee.name}</span><form action="/api/auth/signout" method="post"><button className="filter" type="submit">Sign out</button></form></div>
       </header>
-      <nav className="map-nav"><Link href="/">Public schedule</Link><Link href="/admin">Admin approvals</Link></nav>
+      <nav className="map-nav"><Link href="/">Travel dashboard</Link><Link href="/admin">Admin approvals</Link></nav>
       {message && <div className="submit-status error" role="status">{message}</div>}
       <section className="map-layout">
         <div ref={mapElement} className="travel-map" aria-label="Interactive customer visit map" />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { ASSIGNEES, type Assignee, type TravelFeed } from "@/lib/types";
 import { AddressFields } from "@/components/address-fields";
 
@@ -139,10 +140,12 @@ export function TravelDashboard({
   return (
     <main>
       <header className="hero">
-        <div className="hero-inner">
-          <p className="eyebrow">ShipHero customer success</p>
-          <h1>Central Ops Travel</h1>
-          <p className="hero-copy">Plan customer visits and keep the team aligned.</p>
+        <div className="hero-inner hero-layout">
+          <div>
+            <p className="eyebrow">ShipHero customer success</p>
+            <h1>Central Ops Travel</h1>
+            <p className="hero-copy">Plan customer visits and keep the team aligned.</p>
+          </div>
           <div className={feed.source === "live" ? "sync-pill" : "sync-pill pending"} aria-label="Calendar refresh status">
             <span aria-hidden="true" />
             {feed.source === "live" ? "Private calendar sync · Every 15 minutes" : "Verified snapshot · Live sync pending"}
@@ -154,7 +157,7 @@ export function TravelDashboard({
         <nav className="view-tabs" aria-label="Travel workspace">
           <button type="button" className={view === "schedule" ? "active" : ""} onClick={() => setView("schedule")}>Upcoming travel</button>
           <button type="button" className={view === "submit" ? "active" : ""} onClick={() => setView("submit")}>Submit a visit</button>
-          <a href="/map">Team map</a>
+          <Link href="/map">Map view</Link>
         </nav>
 
         {view === "schedule" ? (
