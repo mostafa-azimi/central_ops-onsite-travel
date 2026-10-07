@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { allowedAssignee, CALENDAR_ID, CALENDAR_TIME_ZONE, publicFields } from "@/lib/calendar";
 import { inclusiveEndToExclusive, type TripType } from "@/lib/submissions";
-import type { Assignee, EmployeeTravelEvent, TravelEvent } from "@/lib/types";
+import { TRAVELER_EMAILS, type Assignee, type EmployeeTravelEvent, type TravelEvent } from "@/lib/types";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
@@ -18,13 +18,6 @@ type GoogleEvent = {
   end?: { date?: string; dateTime?: string };
   attendees?: Array<{ email?: string; displayName?: string; responseStatus?: string }>;
   extendedProperties?: { private?: Record<string, string> };
-};
-
-export const TRAVELER_EMAILS: Record<Assignee, string> = {
-  "Chris Haun": "chris.haun@shiphero.com",
-  "Mike Azimi": "mike.azimi@shiphero.com",
-  "Rob McFaul": "rob.mcfaul@shiphero.com",
-  "Sam Armenia": "samuel.armenia@shiphero.com",
 };
 
 type CalendarWriteInput = {
@@ -116,7 +109,12 @@ function publicId(event: GoogleEvent, start: string) {
 export function googleEventToPublic(event: GoogleEvent): TravelEvent | null {
   if (event.status === "cancelled" || !event.start || !event.end) return null;
   const summary = String(event.summary ?? "");
-  const assignee = allowedAssignee(summary);
+  const assignee = allowedAssignee(
+    summary,
+    (event.attendees ?? [])
+      .filter((attendee) => attendee.responseStatus !== "declined")
+      .map((attendee) => attendee.email ?? ""),
+  );
   if (!assignee) return null;
   const start = event.start.date ?? event.start.dateTime;
   const end = event.end.date ?? event.end.dateTime;
@@ -218,7 +216,12 @@ async function getManagedCalendarEvent(eventId: string, fetchImpl: Fetch) {
   const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
   if (!response.ok) throw new Error(`Calendar event lookup failed: ${await responseMessage(response)}`);
   const event = (await response.json()) as GoogleEvent;
-  const assignee = allowedAssignee(String(event.summary ?? ""));
+  const assignee = allowedAssignee(
+    String(event.summary ?? ""),
+    (event.attendees ?? [])
+      .filter((attendee) => attendee.responseStatus !== "declined")
+      .map((attendee) => attendee.email ?? ""),
+  );
   if (!assignee || event.status === "cancelled") throw new Error("EVENT_NOT_AVAILABLE");
   return { token, url, event, assignee };
 }

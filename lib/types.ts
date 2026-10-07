@@ -7,6 +7,13 @@ export const ASSIGNEES = [
 
 export type Assignee = (typeof ASSIGNEES)[number];
 
+export const TRAVELER_EMAILS: Record<Assignee, string> = {
+  "Chris Haun": "chris.haun@shiphero.com",
+  "Mike Azimi": "mike.azimi@shiphero.com",
+  "Rob McFaul": "rob.mcfaul@shiphero.com",
+  "Sam Armenia": "samuel.armenia@shiphero.com",
+};
+
 export type TravelEvent = {
   id: string;
   assignee: Assignee;

@@ -1,6 +1,6 @@
 import * as ical from "node-ical";
 import snapshot from "@/data/snapshot.json";
-import { ASSIGNEES, type Assignee, type TravelEvent, type TravelFeed } from "@/lib/types";
+import { ASSIGNEES, TRAVELER_EMAILS, type Assignee, type TravelEvent, type TravelFeed } from "@/lib/types";
 
 export const CALENDAR_ID =
   "c_8c7ba0dba70e52cecccbcaf595c59c55462074d031f50eecca5138a8303bc6f2@group.calendar.google.com";
@@ -13,13 +13,30 @@ function canonical(value: string) {
   return value.toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-export function allowedAssignee(summary: string): Assignee | null {
+function normalizedEmail(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^mailto:/i, "")
+    .split("?", 1)[0]
+    .toLocaleLowerCase("en-US");
+}
+
+export function allowedAssignee(summary: string, identityEmails: Iterable<string>): Assignee | null {
   const value = canonical(summary);
   const normalized = ` ${value} `;
   const fullName = ASSIGNEES.find((name) => normalized.includes(` ${canonical(name)} `));
-  if (fullName) return fullName;
   const firstToken = value.split(" ")[0];
-  return ASSIGNEES.find((name) => canonical(name).split(" ")[0] === firstToken) ?? null;
+  const candidate = fullName ?? ASSIGNEES.find((name) => canonical(name).split(" ")[0] === firstToken);
+  if (!candidate) return null;
+  const emails = new Set([...identityEmails].map(normalizedEmail));
+  return emails.has(TRAVELER_EMAILS[candidate].toLowerCase()) ? candidate : null;
+}
+
+function attendeeEmails(event: CalendarEvent) {
+  const attendees = event.attendee == null
+    ? []
+    : Array.isArray(event.attendee) ? event.attendee : [event.attendee];
+  return attendees.map((attendee) => typeof attendee === "string" ? attendee : attendee.val);
 }
 
 function cleanText(value: unknown, max = 100) {
@@ -81,7 +98,7 @@ function occurrenceToPublic(
 ): TravelEvent | null {
   if (String(event.status ?? "").toUpperCase() === "CANCELLED") return null;
   const summary = cleanText(event.summary, 140);
-  const assignee = allowedAssignee(summary);
+  const assignee = allowedAssignee(summary, attendeeEmails(event));
   if (!assignee) return null;
   const fields = publicFields(summary, assignee, event.location);
   const allDay = event.datetype === "date";

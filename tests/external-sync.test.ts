@@ -75,10 +75,31 @@ test("Google event sanitizer excludes cancelled and non-allowlisted travel", () 
     location: "https://meet.google.com/secret",
     start: { date: "2026-10-05" },
     end: { date: "2026-10-08" },
+    attendees: [{ email: "samuel.armenia@shiphero.com" }],
   });
   assert.equal(safe?.customer, "Acme");
   assert.equal(safe?.location, "");
   assert.equal(safe?.end, "2026-10-08");
+});
+
+test("Google event sanitizer rejects a same-first-name traveler with a different email", () => {
+  const wrongChris = googleEventToPublic({
+    id: "wonder",
+    summary: "Chris onsite to Wonder",
+    start: { date: "2026-10-08" },
+    end: { date: "2026-10-10" },
+    attendees: [{ email: "another.chris@shiphero.com", displayName: "Chris Other" }],
+  });
+  assert.equal(wrongChris, null);
+
+  const chrisHaun = googleEventToPublic({
+    id: "verified-chris",
+    summary: "Chris onsite to Verified Customer",
+    start: { date: "2026-10-08" },
+    end: { date: "2026-10-10" },
+    attendees: [{ email: "chris.haun@shiphero.com", displayName: "Chris Haun" }],
+  });
+  assert.equal(chrisHaun?.assignee, "Chris Haun");
 });
 
 test("Calendar creation is deterministic and keeps the all-day end exclusive", async () => {
@@ -203,7 +224,12 @@ test("reschedule and cancellation notify Calendar attendees", async () => {
     calls.push({ url, init });
     if (url.includes("oauth2.googleapis.com")) return Response.json({ access_token: "access", expires_in: 3600 });
     if (init?.method === "PATCH" || init?.method === "DELETE") return init.method === "DELETE" ? new Response(null, { status: 204 }) : Response.json({});
-    return Response.json({ id: "event123", summary: "Mike Azimi: GTI", extendedProperties: { private: {} } });
+    return Response.json({
+      id: "event123",
+      summary: "Mike Azimi: GTI",
+      attendees: [{ email: "mike.azimi@shiphero.com", displayName: "Mike Azimi" }],
+      extendedProperties: { private: {} },
+    });
   }) as typeof fetch;
   await rescheduleCalendarEvent("event123", {
     start: "2026-11-10", endInclusive: "2026-11-12", fullAddress: "1 King St, Toronto, ON, Canada", latitude: 43.65, longitude: -79.38,

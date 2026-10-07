@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { allowedAssignee, parseCalendar, publicFields } from "@/lib/calendar";
 
-test("only the four allowlisted people can match", () => {
-  assert.equal(allowedAssignee("Sam Armenia - Velocity"), "Sam Armenia");
-  assert.equal(allowedAssignee("Joey - Customer visit"), null);
-  assert.equal(allowedAssignee("Samantha Armenia - Customer visit"), null);
-  assert.equal(allowedAssignee("Sam - Customer visit"), "Sam Armenia");
-  assert.equal(allowedAssignee("Customer visit with Sam"), null);
+test("only exact allowlisted traveler emails can validate a named assignee", () => {
+  const sam = ["samuel.armenia@shiphero.com"];
+  assert.equal(allowedAssignee("Sam Armenia - Velocity", sam), "Sam Armenia");
+  assert.equal(allowedAssignee("Joey - Customer visit", ["joey@example.com"]), null);
+  assert.equal(allowedAssignee("Samantha Armenia - Customer visit", sam), null);
+  assert.equal(allowedAssignee("Sam - Customer visit", sam), "Sam Armenia");
+  assert.equal(allowedAssignee("Customer visit with Sam", sam), null);
+  assert.equal(allowedAssignee("Chris onsite to Wonder", ["another.chris@shiphero.com"]), null);
+  assert.equal(allowedAssignee("Chris onsite to Wonder", ["chris.haun@shiphero.com"]), "Chris Haun");
 });
 
 test("the public DTO removes names and unsafe locations", () => {
@@ -28,6 +31,7 @@ DTEND;VALUE=DATE:20261008\r
 RRULE:FREQ=WEEKLY;COUNT=4\r
 EXDATE;VALUE=DATE:20261013\r
 SUMMARY:Sam Armenia - Velocity\r
+ATTENDEE:mailto:samuel.armenia@shiphero.com\r
 END:VEVENT\r
 BEGIN:VEVENT\r
 UID:cancelled-1\r
@@ -42,6 +46,13 @@ DTSTART;VALUE=DATE:20261010\r
 DTEND;VALUE=DATE:20261011\r
 SUMMARY:Joey - Excluded visit\r
 DESCRIPTION:private@example.com https://meet.google.com/secret\r
+END:VEVENT\r
+BEGIN:VEVENT\r
+UID:wrong-chris\r
+DTSTART;VALUE=DATE:20261011\r
+DTEND;VALUE=DATE:20261012\r
+SUMMARY:Chris onsite to Wonder\r
+ATTENDEE:mailto:another.chris@shiphero.com\r
 END:VEVENT\r
 END:VCALENDAR\r
 `;
