@@ -62,6 +62,34 @@ function employeeName(attendee: { email?: string; displayName?: string }) {
   return email.split("@")[0].split(/[._-]/).map((part) => part ? part[0].toUpperCase() + part.slice(1) : "").join(" ");
 }
 
+export function additionalParticipantNames(
+  assignee: Assignee,
+  attendees: Array<{ email?: string; displayName?: string; responseStatus?: string }>,
+) {
+  const primaryEmail = TRAVELER_EMAILS[assignee].toLowerCase();
+  const seenEmails = new Set<string>();
+  const seenNames = new Set<string>();
+  const names: string[] = [];
+  for (const attendee of attendees) {
+    const email = String(attendee.email ?? "").trim().toLowerCase();
+    if (attendee.responseStatus === "declined" || !email || email === primaryEmail || seenEmails.has(email)) continue;
+    seenEmails.add(email);
+    const name = employeeName(attendee);
+    const nameKey = name?.trim().toLocaleLowerCase("en-US") ?? "";
+    if (!name || seenNames.has(nameKey)) continue;
+    seenNames.add(nameKey);
+    names.push(name);
+  }
+  return names;
+}
+
+function calendarParticipantNames(
+  assignee: Assignee,
+  attendees: Array<{ email?: string; displayName?: string; responseStatus?: string }>,
+) {
+  return [assignee, ...additionalParticipantNames(assignee, attendees)];
+}
+
 function finiteCoordinate(value: string | undefined, min: number, max: number) {
   const number = Number(value);
   return Number.isFinite(number) && number >= min && number <= max ? number : null;
@@ -209,17 +237,11 @@ export async function fetchEmployeeTravelEvents(
   return (body.items ?? []).flatMap((event) => {
     const publicEvent = googleEventToPublic(event);
     if (!publicEvent || !event.id) return [];
-    const participants = new Set<string>([publicEvent.assignee]);
-    for (const attendee of event.attendees ?? []) {
-      if (attendee.responseStatus === "declined") continue;
-      const name = employeeName(attendee);
-      if (name) participants.add(name);
-    }
     const privateProperties = event.extendedProperties?.private ?? {};
     return [{
       ...publicEvent,
       calendarEventId: event.id,
-      participants: [...participants],
+      participants: additionalParticipantNames(publicEvent.assignee, event.attendees ?? []),
       joined: (event.attendees ?? []).some((attendee) => attendee.email?.toLowerCase() === employeeEmail.toLowerCase()),
       countryCode: /^[A-Z]{2}$/i.test(privateProperties.countryCode ?? "") ? String(privateProperties.countryCode).toUpperCase() : "US",
       latitude: finiteCoordinate(privateProperties.latitude, -90, 90),
@@ -261,7 +283,7 @@ export async function updateCalendarAttendance(
   if ((action === "join" && isAttending) || (action === "leave" && !isAttending)) {
     return {
       requestId: event.extendedProperties?.private?.centralOpsRequestId ?? null,
-      participants: [...new Set([assignee, ...current.map(employeeName).filter((name): name is string => Boolean(name))])],
+      participants: calendarParticipantNames(assignee, current),
     };
   }
   const attendees = action === "join"
@@ -276,7 +298,7 @@ export async function updateCalendarAttendance(
   if (!response.ok) throw new Error(`Calendar attendee update failed: ${await responseMessage(response)}`);
   return {
     requestId: event.extendedProperties?.private?.centralOpsRequestId ?? null,
-    participants: [...new Set([assignee, ...attendees.map(employeeName).filter((name): name is string => Boolean(name))])],
+    participants: calendarParticipantNames(assignee, attendees),
   };
 }
 

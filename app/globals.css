@@ -371,6 +371,7 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .map-visit-card { display: grid; gap: 13px; margin-bottom: 8px; padding: 16px; border: 1px solid var(--line); border-left: 3px solid var(--primary); border-radius: 4px; background: var(--surface); }
 .map-visit-card p { margin: 5px 0 0; color: var(--text-muted); font-size: .86rem; }
 .participant-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.participant-list > strong { align-self: center; margin-right: 2px; color: var(--text-muted); font-size: .72rem; }
 .participant-list span { padding: 4px 7px; border: 1px solid var(--line); border-radius: 3px; color: var(--text); font-size: .72rem; font-weight: 800; }
 .map-visit-card button { justify-self: start; }
 .map-popup { color: var(--onyx); font-family: "Figtree", sans-serif; line-height: 1.5; }

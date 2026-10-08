@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { EmployeeSession } from "@/lib/admin-auth";
 import type { AddressSuggestion } from "@/lib/geocoding";
-import { ASSIGNEES, type EmployeeTravelEvent } from "@/lib/types";
+import { ASSIGNEES, TRAVELER_EMAILS, type EmployeeTravelEvent } from "@/lib/types";
 import { TRAVELER_MAP_COLORS, travelerColorClass } from "@/lib/traveler-colors";
 
 type Coordinate = { lat: number; lng: number };
@@ -68,11 +68,14 @@ export function TravelMap({
       const bounds = L.latLngBounds([]);
       for (const { event, position } of points) {
         if (!position) continue;
+        const joiningLine = event.participants.length > 0
+          ? `<br><span>Joining: ${escapeHtml(event.participants.join(", "))}</span>`
+          : "";
         const marker = L.marker([position.lat, position.lng], {
-          title: `${event.customer}: ${event.participants.join(", ")}`,
+          title: `${event.customer}: ${[event.assignee, ...event.participants].join(", ")}`,
           icon: L.divIcon({ className: `travel-pin ${travelerColorClass(event.assignee)}`, html: '<span aria-hidden="true"></span>', iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -32] }),
         }).addTo(map);
-        marker.bindPopup(`<div class="map-popup"><strong>${escapeHtml(event.customer)}</strong><br>${escapeHtml(event.location)}<br><span>Traveler: ${escapeHtml(event.assignee)}</span><br><span>Joining: ${escapeHtml(event.participants.join(", "))}</span></div>`);
+        marker.bindPopup(`<div class="map-popup"><strong>${escapeHtml(event.customer)}</strong><br>${escapeHtml(event.location)}<br><span>Traveler: ${escapeHtml(event.assignee)}</span>${joiningLine}</div>`);
         bounds.extend([position.lat, position.lng]);
       }
       if (bounds.isValid()) map.fitBounds(bounds.pad(0.18), { maxZoom: 7 });
@@ -127,15 +130,18 @@ export function TravelMap({
         </div>
         <div className="map-visits">
           <div className="map-visits-heading"><h2>{initialEvents.length} active {initialEvents.length === 1 ? "visit" : "visits"}</h2><p>North America is the default view. Other regions appear automatically when active.</p></div>
-          {initialEvents.map((event) => (
-            <article className="map-visit-card" key={event.calendarEventId}>
-              <div><h3>{event.customer}</h3><p>{dateRange(event)}</p><p>{event.location || "Location pending"}</p></div>
-              <div className="participant-list" aria-label="People on this visit">{event.participants.map((name) => <span key={name}>{name}</span>)}</div>
-              <button className={event.joined ? "filter active" : "btn-primary"} type="button" disabled={workingId === event.calendarEventId} onClick={() => void attendance(event)}>
-                {workingId === event.calendarEventId ? "Updating…" : event.joined ? "Leave visit" : "Join and shadow"}
-              </button>
-            </article>
-          ))}
+          {initialEvents.map((event) => {
+            const isPrimaryTraveler = TRAVELER_EMAILS[event.assignee].toLowerCase() === employee.email.toLowerCase();
+            return (
+              <article className="map-visit-card" key={event.calendarEventId}>
+                <div><h3>{event.customer}</h3><p>{dateRange(event)}</p><p>{event.location || "Location pending"}</p><p><strong>Traveler:</strong> {event.assignee}</p></div>
+                {event.participants.length > 0 && <div className="participant-list" aria-label="Additional people joining this visit"><strong>Joining:</strong>{event.participants.map((name) => <span key={name}>{name}</span>)}</div>}
+                <button className={event.joined || isPrimaryTraveler ? "filter active" : "btn-primary"} type="button" disabled={isPrimaryTraveler || workingId === event.calendarEventId} onClick={() => void attendance(event)}>
+                  {isPrimaryTraveler ? "Assigned traveler" : workingId === event.calendarEventId ? "Updating…" : event.joined ? "Leave visit" : "Join and shadow"}
+                </button>
+              </article>
+            );
+          })}
           {initialEvents.length === 0 && <div className="empty-state"><h3>No active visits</h3><p>Approved visits will appear here.</p></div>}
         </div>
       </section>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cancelCalendarEvent, createOrGetCalendarEvent, googleEventToPublic, rescheduleCalendarEvent, updateCalendarAttendance } from "@/lib/google-calendar";
+import { additionalParticipantNames, cancelCalendarEvent, createOrGetCalendarEvent, googleEventToPublic, rescheduleCalendarEvent, updateCalendarAttendance } from "@/lib/google-calendar";
 import { createOrGetHubSpotMeeting, findVerifiedCompany, meetingTimes } from "@/lib/hubspot";
 import { approvalConnectionError } from "@/lib/approve-request";
 import type { StoredVisitRequest } from "@/lib/db";
@@ -113,6 +113,16 @@ test("Google event sanitizer rejects a same-first-name traveler with a different
     attendees: [{ email: "chris.haun@shiphero.com", displayName: "Chris Haun" }],
   });
   assert.equal(chrisHaun?.assignee, "Chris Haun");
+});
+
+test("map joiners exclude the assigned traveler and deduplicate verified employees", () => {
+  assert.deepEqual(additionalParticipantNames("Sam Armenia", [
+    { email: "samuel.armenia@shiphero.com", displayName: "Samuel Armenia" },
+    { email: "samuel.armenia@shiphero.com", displayName: "Sam Armenia" },
+    { email: "alex.person@shiphero.com", displayName: "Alex Person" },
+    { email: "ALEX.PERSON@shiphero.com", displayName: "Alex Person" },
+    { email: "declined.person@shiphero.com", displayName: "Declined Person", responseStatus: "declined" },
+  ]), ["Alex Person"]);
 });
 
 test("Calendar creation is deterministic and keeps the all-day end exclusive", async () => {
