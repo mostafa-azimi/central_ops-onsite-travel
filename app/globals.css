@@ -146,8 +146,8 @@ h3 { font-size: 1.14rem; }
   text-decoration: none;
 }
 .view-tabs button::after, .view-tabs a::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: transparent; }
-.view-tabs button:hover, .view-tabs a:hover, .view-tabs button.active { color: var(--text); }
-.view-tabs button.active::after, .view-tabs a:hover::after { background: var(--primary); }
+.view-tabs button:hover, .view-tabs a:hover, .view-tabs button.active, .view-tabs a.active { color: var(--text); }
+.view-tabs button.active::after, .view-tabs a.active::after, .view-tabs a:hover::after { background: var(--primary); }
 
 .toolbar {
   display: grid;
@@ -320,6 +320,7 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .map-nav { display: flex; gap: 22px; margin: 18px 0; }
 .map-nav a { color: var(--text-muted); font-size: .88rem; font-weight: 800; text-decoration: none; }
 .map-nav a:hover { color: var(--primary); }
+.map-workspace-nav { margin: 8px 0 18px; }
 .map-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(340px, .72fr); gap: 16px; min-height: 650px; }
 .travel-map { min-height: 650px; overflow: hidden; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-muted); }
 .travel-pin { background: transparent; }

@@ -206,8 +206,9 @@ export function TravelDashboard({
       <section className="content">
         <nav className="view-tabs" aria-label="Travel workspace">
           <button type="button" className={view === "schedule" ? "active" : ""} onClick={() => setView("schedule")}>Upcoming travel</button>
-          <button type="button" className={view === "submit" ? "active" : ""} onClick={() => setView("submit")}>Submit a visit</button>
+          <button type="button" className={view === "submit" ? "active" : ""} onClick={() => setView("submit")}>Requests</button>
           <Link href="/map">Map view</Link>
+          {canAdminister && <Link href="/admin">Approvals</Link>}
         </nav>
 
         {view === "schedule" ? (

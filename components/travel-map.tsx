@@ -26,7 +26,7 @@ async function eventCoordinate(event: EmployeeTravelEvent): Promise<Coordinate |
   if (event.latitude != null && event.longitude != null) return { lat: event.latitude, lng: event.longitude };
   if (!event.location) return null;
   try {
-    const response = await fetch(`/api/geocode?q=${encodeURIComponent(event.location)}`);
+    const response = await fetch(`/api/geocode?q=${encodeURIComponent(event.location)}&countryCode=${encodeURIComponent(event.countryCode || "US")}`);
     if (!response.ok) return null;
     const body = (await response.json()) as { suggestions?: AddressSuggestion[] };
     const first = body.suggestions?.[0];
@@ -39,9 +39,11 @@ async function eventCoordinate(event: EmployeeTravelEvent): Promise<Coordinate |
 export function TravelMap({
   employee,
   initialEvents,
+  canAdminister,
 }: {
   employee: EmployeeSession;
   initialEvents: EmployeeTravelEvent[];
+  canAdminister: boolean;
 }) {
   const mapElement = useRef<HTMLDivElement>(null);
   const [workingId, setWorkingId] = useState("");
@@ -101,7 +103,11 @@ export function TravelMap({
         <div><p className="eyebrow">ShipHero employee view</p><h1>Map view</h1><p>See active visits, who is going, and add yourself to the Calendar invite.</p></div>
         <div className="map-account"><span>{employee.name}</span><form action="/api/auth/signout" method="post"><button className="filter" type="submit">Sign out</button></form></div>
       </header>
-      <nav className="map-nav"><Link href="/">Travel dashboard</Link><Link href="/admin">Admin approvals</Link></nav>
+      <nav className="view-tabs map-workspace-nav" aria-label="Travel workspace">
+        <Link href="/?view=submit">Requests</Link>
+        <Link href="/map" className="active" aria-current="page">Map view</Link>
+        {canAdminister && <Link href="/admin">Approvals</Link>}
+      </nav>
       {message && <div className="submit-status error" role="status">{message}</div>}
       <section className="map-layout">
         <div ref={mapElement} className="travel-map" aria-label="Interactive customer visit map" />

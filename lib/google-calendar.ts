@@ -204,6 +204,7 @@ export async function fetchEmployeeTravelEvents(
       calendarEventId: event.id,
       participants: [...participants],
       joined: (event.attendees ?? []).some((attendee) => attendee.email?.toLowerCase() === employeeEmail.toLowerCase()),
+      countryCode: /^[A-Z]{2}$/i.test(privateProperties.countryCode ?? "") ? String(privateProperties.countryCode).toUpperCase() : "US",
       latitude: finiteCoordinate(privateProperties.latitude, -90, 90),
       longitude: finiteCoordinate(privateProperties.longitude, -180, 180),
     }];

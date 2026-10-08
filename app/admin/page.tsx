@@ -17,7 +17,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <section className="admin-card">
           <p className="eyebrow">Central Ops Travel</p>
           <h1>Travel approvals</h1>
-          <p>Sign in with an approved Google account to review requests, assign travelers, and schedule visits.</p>
+          <p>Sign in as {INITIAL_ADMIN_EMAIL} to review requests, assign travelers, and schedule visits.</p>
           {error && <div className="submit-status error">That Google account is not authorized.</div>}
           {adminAuthConfigured() ? (
             <a className="btn-primary admin-signin" href="/api/auth/google/start">Sign in with Google</a>
@@ -39,6 +39,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   return (
     <main className="admin-shell">
       <section className="admin-card wide-admin">
+        <nav className="view-tabs" aria-label="Travel workspace">
+          <Link href="/?view=submit">Requests</Link>
+          <Link href="/map">Map view</Link>
+          <Link href="/admin" className="active" aria-current="page">Approvals</Link>
+        </nav>
         <div className="admin-header">
           <div><p className="eyebrow">Signed in as {session.email}</p><h1>Travel approvals</h1></div>
           <form action="/api/auth/signout" method="post"><button className="filter" type="submit">Sign out</button></form>
@@ -49,9 +54,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             Calendar: {calendarReady ? "connected" : "pending"} · HubSpot: {hubSpotReady ? "connected" : "pending"}
           </div>
         )}
-        <p>Only signed-in, allowlisted administrators can approve, deny, assign a traveler, or directly schedule a visit.</p>
+        <p>Only {INITIAL_ADMIN_EMAIL} can approve, deny, assign a traveler, or directly schedule a visit.</p>
         {hasDatabase && <AdminDashboard initialRequests={requests} />}
-        <Link href="/">View public travel</Link>
       </section>
     </main>
   );

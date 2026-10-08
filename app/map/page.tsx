@@ -2,6 +2,7 @@ import Link from "next/link";
 import { adminAuthConfigured, getEmployeeSession } from "@/lib/admin-auth";
 import { fetchEmployeeTravelEvents, googleCalendarConfigured } from "@/lib/google-calendar";
 import { TravelMap } from "@/components/travel-map";
+import { isAllowedAdminEmail } from "@/lib/admin-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -23,5 +24,5 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
     );
   }
   const events = googleCalendarConfigured() ? await fetchEmployeeTravelEvents(employee.email) : [];
-  return <TravelMap employee={employee} initialEvents={events} />;
+  return <TravelMap employee={employee} initialEvents={events} canAdminister={isAllowedAdminEmail(employee.email)} />;
 }
