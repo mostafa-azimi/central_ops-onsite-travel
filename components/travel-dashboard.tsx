@@ -97,6 +97,7 @@ export function TravelDashboard({
   }, [feed.events, query, selected]);
   const travelerCount = new Set(feed.events.map((event) => event.assignee)).size;
   const nextTrip = feed.events[0];
+  const visibleRequests = requests.filter((request) => request.status !== "cancelled");
 
   function toggle(assignee: Assignee) {
     setSelected((current) =>
@@ -303,7 +304,7 @@ export function TravelDashboard({
 
                 <div className="request-history-heading"><p className="eyebrow">Your workflow</p><h3>My requests and approvals</h3></div>
                 <div className="request-history">
-                  {requests.map((request) => {
+                  {visibleRequests.map((request) => {
                     const isRequester = request.requesterEmail === employee.email;
                     const assignedEmail = request.assignedTraveler
                       ? TRAVELER_EMAILS[request.assignedTraveler as Assignee]
@@ -333,7 +334,7 @@ export function TravelDashboard({
                       </article>
                     );
                   })}
-                  {requests.length === 0 && <div className="empty-state"><h3>No requests yet</h3><p>Your submitted visits and assigned change approvals will appear here.</p></div>}
+                  {visibleRequests.length === 0 && <div className="empty-state"><h3>No requests yet</h3><p>Your submitted visits and assigned change approvals will appear here.</p></div>}
                 </div>
               </>
             )}
