@@ -110,19 +110,21 @@ export function TravelMap({
         {canAdminister && <Link href="/admin">Approvals</Link>}
       </nav>
       {message && <div className="submit-status error" role="status">{message}</div>}
-      <section className="map-legend" aria-label="Traveler map colors">
-        <strong>Traveler colors</strong>
-        <ul>
-          {ASSIGNEES.map((assignee) => (
-            <li key={assignee}>
-              <span className="map-legend-dot" style={{ backgroundColor: TRAVELER_MAP_COLORS[assignee] }} aria-hidden="true" />
-              <span>{assignee}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
       <section className="map-layout">
-        <div ref={mapElement} className="travel-map" aria-label="Interactive customer visit map" />
+        <div className="map-canvas">
+          <div ref={mapElement} className="travel-map" aria-label="Interactive customer visit map" />
+          <aside className="map-legend" aria-label="Traveler map colors">
+            <strong>Traveler colors</strong>
+            <ul>
+              {ASSIGNEES.map((assignee) => (
+                <li key={assignee}>
+                  <span className="map-legend-dot" style={{ backgroundColor: TRAVELER_MAP_COLORS[assignee] }} aria-hidden="true" />
+                  <span>{assignee}</span>
+                </li>
+              ))}
+            </ul>
+          </aside>
+        </div>
         <div className="map-visits">
           <div className="map-visits-heading"><h2>{initialEvents.length} active {initialEvents.length === 1 ? "visit" : "visits"}</h2><p>North America is the default view. Other regions appear automatically when active.</p></div>
           {initialEvents.map((event) => (
