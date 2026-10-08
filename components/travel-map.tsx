@@ -57,7 +57,7 @@ export function TravelMap({
     void import("leaflet").then(async (leafletModule) => {
       if (!active || !mapElement.current) return;
       const L = leafletModule.default;
-      const map = L.map(mapElement.current, { scrollWheelZoom: false, worldCopyJump: true }).setView([43, -101], 3);
+      const map = L.map(mapElement.current, { scrollWheelZoom: true, touchZoom: true, worldCopyJump: true }).setView([43, -101], 3);
       destroy = () => map.remove();
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
@@ -75,7 +75,7 @@ export function TravelMap({
           title: `${event.customer}: ${[event.assignee, ...event.participants].join(", ")}`,
           icon: L.divIcon({ className: `travel-pin ${travelerColorClass(event.assignee)}`, html: '<span aria-hidden="true"></span>', iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -32] }),
         }).addTo(map);
-        marker.bindPopup(`<div class="map-popup"><strong>${escapeHtml(event.customer)}</strong><br>${escapeHtml(event.location)}<br><span>Traveler: ${escapeHtml(event.assignee)}</span>${joiningLine}</div>`);
+        marker.bindPopup(`<div class="map-popup"><strong>${escapeHtml(event.customer)}</strong><br>${escapeHtml(event.location)}<br><span>Dates: ${escapeHtml(dateRange(event))}</span><br><span>Traveler: ${escapeHtml(event.assignee)}</span>${joiningLine}</div>`);
         bounds.extend([position.lat, position.lng]);
       }
       if (bounds.isValid()) map.fitBounds(bounds.pad(0.18), { maxZoom: 7 });
@@ -129,7 +129,7 @@ export function TravelMap({
           </aside>
         </div>
         <div className="map-visits">
-          <div className="map-visits-heading"><h2>{initialEvents.length} active {initialEvents.length === 1 ? "visit" : "visits"}</h2><p>North America is the default view. Other regions appear automatically when active.</p></div>
+          <div className="map-visits-heading"><h2>{initialEvents.length} active {initialEvents.length === 1 ? "visit" : "visits"}</h2><p>North America is the default view. Pinch or scroll over the map to zoom.</p></div>
           {initialEvents.map((event) => {
             const isPrimaryTraveler = TRAVELER_EMAILS[event.assignee].toLowerCase() === employee.email.toLowerCase();
             return (
