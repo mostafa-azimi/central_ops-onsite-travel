@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { EmployeeSession } from "@/lib/admin-auth";
 import type { AddressSuggestion } from "@/lib/geocoding";
-import type { EmployeeTravelEvent } from "@/lib/types";
+import { ASSIGNEES, type EmployeeTravelEvent } from "@/lib/types";
+import { TRAVELER_MAP_COLORS, travelerColorClass } from "@/lib/traveler-colors";
 
 type Coordinate = { lat: number; lng: number };
 
@@ -69,9 +70,9 @@ export function TravelMap({
         if (!position) continue;
         const marker = L.marker([position.lat, position.lng], {
           title: `${event.customer}: ${event.participants.join(", ")}`,
-          icon: L.divIcon({ className: "travel-pin", html: '<span aria-hidden="true"></span>', iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -32] }),
+          icon: L.divIcon({ className: `travel-pin ${travelerColorClass(event.assignee)}`, html: '<span aria-hidden="true"></span>', iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -32] }),
         }).addTo(map);
-        marker.bindPopup(`<div class="map-popup"><strong>${escapeHtml(event.customer)}</strong><br>${escapeHtml(event.location)}<br><span>${escapeHtml(event.participants.join(", "))}</span></div>`);
+        marker.bindPopup(`<div class="map-popup"><strong>${escapeHtml(event.customer)}</strong><br>${escapeHtml(event.location)}<br><span>Traveler: ${escapeHtml(event.assignee)}</span><br><span>Joining: ${escapeHtml(event.participants.join(", "))}</span></div>`);
         bounds.extend([position.lat, position.lng]);
       }
       if (bounds.isValid()) map.fitBounds(bounds.pad(0.18), { maxZoom: 7 });
@@ -109,6 +110,17 @@ export function TravelMap({
         {canAdminister && <Link href="/admin">Approvals</Link>}
       </nav>
       {message && <div className="submit-status error" role="status">{message}</div>}
+      <section className="map-legend" aria-label="Traveler map colors">
+        <strong>Traveler colors</strong>
+        <ul>
+          {ASSIGNEES.map((assignee) => (
+            <li key={assignee}>
+              <span className="map-legend-dot" style={{ backgroundColor: TRAVELER_MAP_COLORS[assignee] }} aria-hidden="true" />
+              <span>{assignee}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
       <section className="map-layout">
         <div ref={mapElement} className="travel-map" aria-label="Interactive customer visit map" />
         <div className="map-visits">
