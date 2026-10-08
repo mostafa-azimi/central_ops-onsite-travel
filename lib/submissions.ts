@@ -51,7 +51,7 @@ export type VisitSubmission = {
   placeId: string;
   start: string;
   end: string;
-  readiness: ReadinessAnswers;
+  readiness: ReadinessAnswers | null;
   contactName: string;
   contactEmail: string;
   contactPhone: string;
@@ -138,15 +138,18 @@ export function validateVisitSubmission(input: unknown) {
   const placeId = String(value.placeId ?? "").trim();
   const start = String(value.start ?? "");
   const end = String(value.end ?? "");
-  const readinessSource = value.readiness && typeof value.readiness === "object"
-    ? value.readiness as Record<string, unknown>
-    : null;
-  const readiness = {} as ReadinessAnswers;
-  for (const item of READINESS_ITEMS) {
-    if (!readinessSource || typeof readinessSource[item.key] !== "boolean") {
-      return { ok: false as const, message: "Answer every readiness question with Yes or No." };
+  let readiness: ReadinessAnswers | null = null;
+  if (tripType === "Onboarding") {
+    const readinessSource = value.readiness && typeof value.readiness === "object"
+      ? value.readiness as Record<string, unknown>
+      : null;
+    readiness = {} as ReadinessAnswers;
+    for (const item of READINESS_ITEMS) {
+      if (!readinessSource || typeof readinessSource[item.key] !== "boolean") {
+        return { ok: false as const, message: "Answer every readiness question with Yes or No." };
+      }
+      readiness[item.key] = readinessSource[item.key] as boolean;
     }
-    readiness[item.key] = readinessSource[item.key] as boolean;
   }
   const contactName = String(value.contactName ?? "").trim().replace(/\s+/g, " ");
   const contactEmail = String(value.contactEmail ?? "").trim().toLowerCase();

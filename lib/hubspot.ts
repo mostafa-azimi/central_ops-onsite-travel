@@ -146,11 +146,13 @@ export async function createOrGetHubSpotMeeting(
   }
 
   const times = meetingTimes(request.start, company.timeZone, request.warehouseStartTime);
-  const readiness = readinessScore(request.readiness);
+  const readiness = request.tripType === "Onboarding" && request.readiness
+    ? readinessScore(request.readiness)
+    : null;
   const meetingBody = [
     `Point of contact: ${request.contactName} · ${request.contactEmail} · ${request.contactPhone}`,
-    `Readiness: ${readiness.ready} of ${readiness.total}`,
-    ...(readiness.blockers.length ? [`Marked No: ${readiness.blockers.map((item) => item.label).join("; ")}`] : []),
+    ...(readiness ? [`Readiness: ${readiness.ready} of ${readiness.total}`] : []),
+    ...(readiness?.blockers.length ? [`Marked No: ${readiness.blockers.map((item) => item.label).join("; ")}`] : []),
     ...((request.participantsSnapshot ?? []).length > 0 ? [`Visit participants: ${request.participantsSnapshot.join(", ")}`] : []),
   ].join("\n");
   const response = await fetchImpl(`${HUBSPOT_API}/crm/v3/objects/meetings`, {

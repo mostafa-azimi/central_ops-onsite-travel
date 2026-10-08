@@ -81,6 +81,7 @@ export function TravelDashboard({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Assignee[]>([]);
   const [formStart, setFormStart] = useState("");
+  const [formTripType, setFormTripType] = useState("");
   const [formResetVersion, setFormResetVersion] = useState(0);
   const [requests, setRequests] = useState(initialRequests);
   const [confirmCancelId, setConfirmCancelId] = useState("");
@@ -114,13 +115,16 @@ export function TravelDashboard({
     setSubmitStatus({ kind: "working", message: "Submitting request…" });
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const readiness = Object.fromEntries(READINESS_ITEMS.map((item) => {
-      const answer = form.get(`readiness.${item.key}`);
-      return [item.key, answer === "yes" ? true : answer === "no" ? false : null];
-    }));
+    const tripType = String(form.get("tripType"));
+    const readiness = tripType === "Onboarding"
+      ? Object.fromEntries(READINESS_ITEMS.map((item) => {
+          const answer = form.get(`readiness.${item.key}`);
+          return [item.key, answer === "yes" ? true : answer === "no" ? false : null];
+        }))
+      : null;
     const payload = {
       submissionId: crypto.randomUUID(),
-      tripType: String(form.get("tripType")),
+      tripType,
       dateConfidence: String(form.get("dateConfidence")),
       accountName: String(form.get("accountName")).trim(),
       cashUrl: String(form.get("cashUrl")),
@@ -156,6 +160,7 @@ export function TravelDashboard({
       });
       formElement.reset();
       setFormStart("");
+      setFormTripType("");
       setFormResetVersion((version) => version + 1);
     } catch (error) {
       setSubmitStatus({
@@ -298,7 +303,7 @@ export function TravelDashboard({
               <>
                 <div className="employee-session"><span>Submitting as</span><strong>{employee.name}</strong><small>{employee.email}</small></div>
                 <form key={formResetVersion} className="visit-form" onSubmit={submitVisit}>
-                  <label><span>Visit type</span><select name="tripType" required defaultValue=""><option value="" disabled>Select a visit type</option><option>Onboarding</option><option>Central Ops onsite</option></select></label>
+                  <label><span>Visit type</span><select name="tripType" required value={formTripType} onChange={(event) => setFormTripType(event.target.value)}><option value="" disabled>Select a visit type</option><option>Onboarding</option><option>Central Ops onsite</option></select></label>
                   <label><span>Date confidence</span><select name="dateConfidence" required defaultValue=""><option value="" disabled>How firm are these dates?</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
                   <p className="field-note full">Low means exploratory. Medium means likely. High means the customer and dates are confirmed.</p>
                   <label className="full"><span>Account name</span><input name="accountName" required maxLength={120} placeholder="Customer account name" autoComplete="organization" /></label>
@@ -306,7 +311,7 @@ export function TravelDashboard({
                   <AddressFields />
                   <label><span>Start date</span><input name="start" type="date" required onChange={(event) => setFormStart(event.target.value)} /></label>
                   <label><span>End date</span><input name="end" type="date" required min={formStart || undefined} /></label>
-                  <ReadinessFields />
+                  {formTripType === "Onboarding" && <ReadinessFields />}
                   <section className="visit-contact-section full" aria-labelledby="visit-contact-heading">
                     <div className="form-section-heading">
                       <div><p className="eyebrow">Visit logistics</p><h3 id="visit-contact-heading">Onsite contact</h3></div>

@@ -94,6 +94,9 @@ test("requires every readiness answer and all visit logistics fields", () => {
   const missingReadiness = { ...readiness } as Partial<ReadinessAnswers>;
   delete missingReadiness.mobileHardwareReady;
   assert.equal(validateVisitSubmission({ ...valid, readiness: missingReadiness }).ok, false);
+  const centralOps = validateVisitSubmission({ ...valid, tripType: "Central Ops onsite", readiness: null });
+  assert.equal(centralOps.ok, true);
+  if (centralOps.ok) assert.equal(centralOps.value.readiness, null);
   assert.equal(validateVisitSubmission({ ...valid, contactName: "" }).ok, false);
   assert.equal(validateVisitSubmission({ ...valid, contactEmail: "not-an-email" }).ok, false);
   assert.equal(validateVisitSubmission({ ...valid, contactPhone: "12" }).ok, false);

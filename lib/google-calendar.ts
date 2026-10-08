@@ -43,7 +43,7 @@ type CalendarWriteInput = {
 };
 
 function calendarDescription(input: CalendarWriteInput) {
-  const score = input.readiness ? readinessScore(input.readiness) : null;
+  const score = input.tripType === "Onboarding" && input.readiness ? readinessScore(input.readiness) : null;
   return [
     `Visit type: ${input.tripType}`,
     `CASH account: ${input.cashUrl}`,
