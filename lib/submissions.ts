@@ -37,6 +37,33 @@ export function normalizeAccountName(input: unknown) {
   return value;
 }
 
+export function normalizeCustomerLink(input: unknown) {
+  let value = String(input ?? "").trim();
+  if (!value || value.length > 500 || /[\u0000-\u001f\u007f\s]/.test(value)) return null;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}(?:[/:?#]|$)/i.test(value)) return null;
+    value = `https://${value}`;
+  }
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || !url.hostname.includes(".") || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+export function cashAccountIdFromLink(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.hostname.toLowerCase() !== "cash.shiphero.com") return "";
+    const match = /(?:^|\/)client\/([1-9]\d*)(?:\/|$)/i.exec(url.pathname);
+    return match?.[1] ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export function addressWithPostalCode(fullAddress: string, postalCode: string) {
   const addressKey = fullAddress.toUpperCase().replace(/[^A-Z0-9]/g, "");
   const postalKey = postalCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -66,7 +93,7 @@ export function validateVisitSubmission(input: unknown) {
   const traveler = String(value.traveler ?? "");
   const dateConfidence = String(value.dateConfidence ?? "").toLowerCase();
   const accountName = normalizeAccountName(value.accountName);
-  const cashUrl = String(value.cashUrl ?? "");
+  const cashUrl = normalizeCustomerLink(value.cashUrl);
   const fullAddress = String(value.fullAddress ?? "").trim().replace(/\s+/g, " ");
   const city = String(value.city ?? "").trim();
   const rawState = String(value.state ?? value.region ?? "").trim();
@@ -104,15 +131,8 @@ export function validateVisitSubmission(input: unknown) {
     return { ok: false as const, message: "Address longitude is invalid." };
   }
   if (!isDateOnly(start) || !isDateOnly(end) || end < start) return { ok: false as const, message: "Enter a valid inclusive date range." };
-  const cashMatch = /^https:\/\/cash\.shiphero\.com\/client\/([1-9]\d*)\/?$/.exec(cashUrl);
-  if (!cashMatch) {
-    return {
-      ok: false as const,
-      message: "Use a CASH link in the format https://cash.shiphero.com/client/123456.",
-    };
-  }
-  const cashAccountId = cashMatch[1];
-  const canonicalCashUrl = `https://cash.shiphero.com/client/${cashAccountId}`;
+  if (!cashUrl) return { ok: false as const, message: "Enter a valid HTTP or HTTPS customer link." };
+  const cashAccountId = cashAccountIdFromLink(cashUrl);
 
   return {
     ok: true as const,
@@ -122,7 +142,7 @@ export function validateVisitSubmission(input: unknown) {
       traveler: traveler as Assignee,
       dateConfidence: dateConfidence as DateConfidence,
       accountName,
-      cashUrl: canonicalCashUrl,
+      cashUrl,
       cashAccountId,
       fullAddress,
       city,

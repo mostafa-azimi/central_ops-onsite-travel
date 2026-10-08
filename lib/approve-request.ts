@@ -76,6 +76,11 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
       return awaiting;
     }
 
+    if (!withCalendar.cashAccountId) {
+      const awaiting = await markVisitRequestAwaitingHubSpot(withCalendar.id, actorEmail);
+      if (!awaiting) throw new Error("Calendar was created but its pending HubSpot status could not be saved");
+      return awaiting;
+    }
     const company = await findVerifiedCompany(withCalendar.cashAccountId, withCalendar.cashUrl);
     const namedCalendar = await createOrGetCalendarEvent({
       requestId: withCalendar.id,

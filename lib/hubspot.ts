@@ -1,5 +1,5 @@
 import type { StoredVisitRequest } from "@/lib/db";
-import { addressWithPostalCode } from "@/lib/submissions";
+import { addressWithPostalCode, cashAccountIdFromLink } from "@/lib/submissions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const MEETING_TO_COMPANY_ASSOCIATION = 188;
@@ -34,7 +34,7 @@ async function responseMessage(response: Response) {
 
 export async function findVerifiedCompany(
   cashAccountId: string,
-  canonicalCashUrl: string,
+  submittedCustomerUrl: string,
   fetchImpl: Fetch = fetch,
 ): Promise<HubSpotCompany> {
   const response = await fetchImpl(`${HUBSPOT_API}/crm/v3/objects/companies/search`, {
@@ -52,8 +52,12 @@ export async function findVerifiedCompany(
   if (body.results?.length !== 1) throw new Error("HubSpot company lookup did not return exactly one company");
   const company = body.results[0];
   const properties = company.properties ?? {};
-  const savedCashUrl = String(properties.shiphero_cash__account_url ?? "").replace(/\/$/, "");
-  if (properties.account_id !== cashAccountId || savedCashUrl !== canonicalCashUrl) {
+  const savedCashUrl = String(properties.shiphero_cash__account_url ?? "");
+  if (
+    !submittedCustomerUrl ||
+    properties.account_id !== cashAccountId ||
+    cashAccountIdFromLink(savedCashUrl) !== cashAccountId
+  ) {
     throw new Error("HubSpot company does not match the verified CASH account");
   }
   const timeZone = String(properties.timezone ?? "").trim();

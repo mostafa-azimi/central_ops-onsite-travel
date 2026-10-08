@@ -250,7 +250,7 @@ test("reschedule and cancellation notify Calendar attendees", async () => {
   assert.ok(calls.some((call) => call.init?.method === "DELETE" && call.url.includes("sendUpdates=all")));
 });
 
-test("HubSpot company mapping requires one exact account and canonical CASH URL", async () => {
+test("HubSpot company mapping requires one exact account and matching CASH account ID", async () => {
   process.env.HUBSPOT_ACCESS_TOKEN = "test-token";
   const goodFetch = (async () => Response.json({ results: [{
     id: "56996862100",

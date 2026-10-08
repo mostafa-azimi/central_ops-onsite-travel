@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addressWithPostalCode, inclusiveEndToExclusive, validateVisitChange, validateVisitRequest, validateVisitSubmission } from "@/lib/submissions";
+import { addressWithPostalCode, cashAccountIdFromLink, inclusiveEndToExclusive, normalizeCustomerLink, validateVisitChange, validateVisitRequest, validateVisitSubmission } from "@/lib/submissions";
 
 const valid = {
   submissionId: "4f75767a-905d-4b80-b185-f942d659b25f",
@@ -32,7 +32,7 @@ test("postal codes are validated and appended to manual addresses once", () => {
   assert.equal(validateVisitSubmission({ ...valid, postalCode: "1234" }).ok, false);
 });
 
-test("accepts only the fixed travelers and exact CASH account path", () => {
+test("accepts only the fixed travelers and a normal customer link", () => {
   const result = validateVisitSubmission(valid);
   assert.equal(result.ok, true);
   if (result.ok) {
@@ -45,26 +45,29 @@ test("accepts only the fixed travelers and exact CASH account path", () => {
   assert.equal(validateVisitSubmission({ ...valid, traveler: "Joey Buckley" }).ok, false);
   assert.equal(validateVisitSubmission({ ...valid, dateConfidence: "maybe" }).ok, false);
   assert.equal(validateVisitSubmission({ ...valid, accountName: "  " }).ok, false);
-  assert.equal(validateVisitSubmission({ ...valid, cashUrl: "https://evil.test/client/100000" }).ok, false);
+  assert.equal(validateVisitSubmission({ ...valid, cashUrl: "not a link" }).ok, false);
 });
 
-test("allows one trailing slash but rejects arbitrary CASH URL variants", () => {
-  const trailingSlash = validateVisitSubmission({
-    ...valid,
-    cashUrl: "https://cash.shiphero.com/client/100000/",
-  });
-  assert.equal(trailingSlash.ok, true);
-  if (trailingSlash.ok) assert.equal(trailingSlash.value.cashUrl, valid.cashUrl);
+test("accepts flexible HTTP links and extracts known CASH account IDs", () => {
+  assert.equal(normalizeCustomerLink("cash.shiphero.com/client/100000"), "https://cash.shiphero.com/client/100000");
+  assert.equal(cashAccountIdFromLink("https://cash.shiphero.com/client/100000/details?tab=overview"), "100000");
+  assert.equal(cashAccountIdFromLink("https://example.com/client/100000"), "");
 
   for (const cashUrl of [
     "http://cash.shiphero.com/client/100000",
     "https://cash.shiphero.com/client/not-a-number",
-    "https://cash.shiphero.com/client/100000/details",
-    "https://cash.shiphero.com/client/100000?next=https://evil.test",
-    "https://cash.shiphero.com/client/100000#fragment",
-    "https://cash.shiphero.com.evil.test/client/100000",
-    "https://user@cash.shiphero.com/client/100000",
-    "https://cash.shiphero.com:8443/client/100000",
+    "https://cash.shiphero.com/client/100000/details?tab=overview#customer",
+    "https://example.com/customer/acme",
+    "example.com/customer/acme",
+  ]) {
+    assert.equal(validateVisitSubmission({ ...valid, cashUrl }).ok, true, cashUrl);
+  }
+
+  for (const cashUrl of [
+    "javascript:alert(1)",
+    "mailto:mike@shiphero.com",
+    "https://user:secret@example.com/customer",
+    "just some text",
   ]) {
     assert.equal(validateVisitSubmission({ ...valid, cashUrl }).ok, false, cashUrl);
   }

@@ -287,7 +287,7 @@ export function TravelDashboard({
                   <label><span>Date confidence</span><select name="dateConfidence" required defaultValue=""><option value="" disabled>How firm are these dates?</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
                   <p className="field-note full">Low means exploratory. Medium means likely. High means the customer and dates are confirmed.</p>
                   <label className="full"><span>Account name</span><input name="accountName" required maxLength={120} placeholder="Customer account name" autoComplete="organization" /></label>
-                  <label className="full"><span>Customer link in CASH</span><input name="cashUrl" type="url" required placeholder="Paste the customer CASH link" /></label>
+                  <label className="full"><span>Customer link in CASH</span><input name="cashUrl" type="text" inputMode="url" autoComplete="url" required maxLength={500} placeholder="Paste any customer link" /></label>
                   <AddressFields />
                   <label><span>Start date</span><input name="start" type="date" required onChange={(event) => setFormStart(event.target.value)} /></label>
                   <label><span>End date</span><input name="end" type="date" required min={formStart || undefined} /></label>
