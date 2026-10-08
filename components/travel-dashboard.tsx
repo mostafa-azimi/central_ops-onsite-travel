@@ -79,6 +79,7 @@ export function TravelDashboard({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Assignee[]>([]);
   const [formStart, setFormStart] = useState("");
+  const [formResetVersion, setFormResetVersion] = useState(0);
   const [requests, setRequests] = useState(initialRequests);
   const [confirmCancelId, setConfirmCancelId] = useState("");
   const [submitStatus, setSubmitStatus] = useState<{
@@ -139,10 +140,11 @@ export function TravelDashboard({
       if (result.request) setRequests((items) => [result.request!, ...items.filter((item) => item.id !== result.request!.id)]);
       setSubmitStatus({
         kind: "success",
-        message: `Request ${result.requestId} was submitted for approval.`,
+        message: `Request ${result.requestId} was submitted for approval. The form is ready for another request.`,
       });
       formElement.reset();
       setFormStart("");
+      setFormResetVersion((version) => version + 1);
     } catch (error) {
       setSubmitStatus({
         kind: "error",
@@ -283,7 +285,7 @@ export function TravelDashboard({
             ) : (
               <>
                 <div className="employee-session"><span>Submitting as</span><strong>{employee.name}</strong><small>{employee.email}</small></div>
-                <form className="visit-form" onSubmit={submitVisit}>
+                <form key={formResetVersion} className="visit-form" onSubmit={submitVisit}>
                   <label><span>Visit type</span><select name="tripType" required defaultValue=""><option value="" disabled>Select a visit type</option><option>Onboarding</option><option>Central Ops onsite</option></select></label>
                   <label><span>Date confidence</span><select name="dateConfidence" required defaultValue=""><option value="" disabled>How firm are these dates?</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
                   <p className="field-note full">Low means exploratory. Medium means likely. High means the customer and dates are confirmed.</p>
