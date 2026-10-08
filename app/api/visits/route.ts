@@ -59,8 +59,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { traveler, ...requestSubmission } = parsed.value;
-    const saved = await createVisitRequest(requestSubmission);
+    const { traveler, ...requestInput } = parsed.value;
+    const saved = await createVisitRequest({
+      ...requestInput,
+      requesterEmail: admin.email,
+      requesterName: admin.name,
+    });
     const approved = await approveVisitRequest(saved.id, traveler, admin.email);
     return NextResponse.json({ request: approved }, { status: 201 });
   } catch (error) {

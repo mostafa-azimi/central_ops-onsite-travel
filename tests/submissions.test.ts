@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inclusiveEndToExclusive, validateVisitRequest, validateVisitSubmission } from "@/lib/submissions";
+import { inclusiveEndToExclusive, validateVisitChange, validateVisitRequest, validateVisitSubmission } from "@/lib/submissions";
 
 const valid = {
   submissionId: "4f75767a-905d-4b80-b185-f942d659b25f",
   tripType: "Onboarding",
   traveler: "Mike Azimi",
+  dateConfidence: "high",
   accountName: "GTI Properties",
   cashUrl: "https://cash.shiphero.com/client/100000",
   fullAddress: "123 Peachtree St NE, Atlanta, GA 30303, USA",
@@ -35,6 +36,7 @@ test("accepts only the fixed travelers and exact CASH account path", () => {
   }
 
   assert.equal(validateVisitSubmission({ ...valid, traveler: "Joey Buckley" }).ok, false);
+  assert.equal(validateVisitSubmission({ ...valid, dateConfidence: "maybe" }).ok, false);
   assert.equal(validateVisitSubmission({ ...valid, accountName: "  " }).ok, false);
   assert.equal(validateVisitSubmission({ ...valid, cashUrl: "https://evil.test/client/100000" }).ok, false);
 });
@@ -86,4 +88,13 @@ test("accepts international regions and full structured addresses", () => {
     assert.equal(result.value.countryCode, "GB");
     assert.equal(result.value.state, "Greater London");
   }
+});
+
+test("requester changes accept cancellation or an inclusive replacement date range", () => {
+  assert.deepEqual(validateVisitChange({ action: "request_cancel" }), {
+    ok: true,
+    value: { type: "cancel", start: null, end: null },
+  });
+  assert.equal(validateVisitChange({ action: "request_reschedule", start: "2026-10-31", end: "2026-11-02" }).ok, true);
+  assert.equal(validateVisitChange({ action: "request_reschedule", start: "2026-11-02", end: "2026-10-31" }).ok, false);
 });

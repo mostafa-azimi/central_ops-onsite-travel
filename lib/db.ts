@@ -1,11 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import { normalizeAccountName, type VisitRequestSubmission } from "@/lib/submissions";
+import { TRAVELER_EMAILS, type Assignee } from "@/lib/types";
 
 const SHEETS_API = "https://sheets.googleapis.com/v4";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REQUESTS_TAB = "Requests";
 const AUDIT_TAB = "Audit";
-const REQUEST_COLUMN_COUNT = 33;
+const REQUEST_COLUMN_COUNT = 44;
+const REQUEST_RANGE_END = "AR";
 type Fetch = typeof fetch;
 
 export const REQUEST_HEADERS = [
@@ -16,6 +18,9 @@ export const REQUEST_HEADERS = [
   "payload_fingerprint", "claim_token", "account_name",
   "full_address", "country_code", "latitude", "longitude", "place_id",
   "lifecycle_action", "lifecycle_version", "participants_snapshot",
+  "date_confidence", "requester_email", "requester_name", "change_type", "change_status",
+  "proposed_start_date", "proposed_end_date", "change_requested_by_email", "change_requested_at",
+  "change_decided_by_email", "change_decided_at",
 ] as const;
 
 export const AUDIT_HEADERS = [
@@ -39,6 +44,13 @@ export type StoredVisitRequest = VisitRequestSubmission & {
   lifecycleAction: "create" | "reschedule" | "cancel" | "participants";
   lifecycleVersion: number;
   participantsSnapshot: string[];
+  pendingChange: null | {
+    type: "reschedule" | "cancel";
+    start: string | null;
+    end: string | null;
+    requestedByEmail: string;
+    requestedAt: string;
+  };
 };
 
 type RequestRow = {
@@ -126,6 +138,9 @@ export function requestFingerprint(input: VisitRequestSubmission) {
     placeId: input.placeId,
     start: input.start,
     end: input.end,
+    dateConfidence: input.dateConfidence,
+    requesterEmail: input.requesterEmail,
+    requesterName: input.requesterName,
   })).digest("hex");
 }
 
@@ -161,6 +176,18 @@ export function storedRequestFromValues(values: string[]): StoredVisitRequest {
     lifecycleAction: (cell(values, 30) || "create") as StoredVisitRequest["lifecycleAction"],
     lifecycleVersion: Number(cell(values, 31) || 1),
     participantsSnapshot: (() => { try { const value = JSON.parse(cell(values, 32) || "[]"); return Array.isArray(value) ? value.map(String) : []; } catch { return []; } })(),
+    dateConfidence: (cell(values, 33) || "medium") as VisitRequestSubmission["dateConfidence"],
+    requesterEmail: cell(values, 34).toLowerCase(),
+    requesterName: cell(values, 35),
+    pendingChange: cell(values, 37) === "pending" && ["reschedule", "cancel"].includes(cell(values, 36))
+      ? {
+          type: cell(values, 36) as "reschedule" | "cancel",
+          start: cell(values, 38) || null,
+          end: cell(values, 39) || null,
+          requestedByEmail: cell(values, 40).toLowerCase(),
+          requestedAt: cell(values, 41),
+        }
+      : null,
   };
 }
 
@@ -184,6 +211,8 @@ function initialValues(input: VisitRequestSubmission) {
     "not_started", "", "0", "", requestFingerprint(input), "", input.accountName,
     input.fullAddress, input.countryCode, input.latitude == null ? "" : String(input.latitude),
     input.longitude == null ? "" : String(input.longitude), input.placeId, "create", "1", "",
+    input.dateConfidence, input.requesterEmail.toLowerCase(), input.requesterName,
+    "", "", "", "", "", "", "", "",
   ];
 }
 
@@ -200,7 +229,7 @@ async function sheetsFetch(path: string, init: RequestInit, fetchImpl: Fetch) {
 
 async function ensureRequestSchema(fetchImpl: Fetch) {
   if (schemaEnsured) return;
-  const rangeName = `${REQUESTS_TAB}!A1:AG1`;
+  const rangeName = `${REQUESTS_TAB}!A1:${REQUEST_RANGE_END}1`;
   await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(rangeName)}?valueInputOption=RAW`,
     { method: "PUT", body: JSON.stringify({ range: rangeName, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] }) },
@@ -210,7 +239,7 @@ async function ensureRequestSchema(fetchImpl: Fetch) {
 }
 
 async function readRows(fetchImpl: Fetch = fetch) {
-  const range = encodeURIComponent(`${REQUESTS_TAB}!A2:AG10001`);
+  const range = encodeURIComponent(`${REQUESTS_TAB}!A2:${REQUEST_RANGE_END}10001`);
   const response = await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}?majorDimension=ROWS`,
     { method: "GET" },
@@ -221,7 +250,7 @@ async function readRows(fetchImpl: Fetch = fetch) {
 }
 
 async function appendValues(tab: string, values: string[], fetchImpl: Fetch) {
-  const range = encodeURIComponent(`${tab}!A:AG`);
+  const range = encodeURIComponent(`${tab}!A:${tab === REQUESTS_TAB ? REQUEST_RANGE_END : "F"}`);
   await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ majorDimension: "ROWS", values: [values] }) },
@@ -230,7 +259,7 @@ async function appendValues(tab: string, values: string[], fetchImpl: Fetch) {
 }
 
 async function updateRow(row: RequestRow, fetchImpl: Fetch) {
-  const rangeName = `${REQUESTS_TAB}!A${row.rowNumber}:AG${row.rowNumber}`;
+  const rangeName = `${REQUESTS_TAB}!A${row.rowNumber}:${REQUEST_RANGE_END}${row.rowNumber}`;
   await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(rangeName)}?valueInputOption=RAW`,
     { method: "PUT", body: JSON.stringify({ range: rangeName, majorDimension: "ROWS", values: [row.values] }) },
@@ -272,13 +301,81 @@ export async function createVisitRequest(input: VisitRequestSubmission, fetchImp
 
 export async function listVisitRequests(fetchImpl: Fetch = fetch) {
   await ensureRequestSchema(fetchImpl);
+  const confidenceRank = { low: 1, medium: 2, high: 3 } as const;
   return canonicalRows(await readRows(fetchImpl))
     .map((row) => row.request)
-    .sort((a, b) => Number(a.status !== "pending") - Number(b.status !== "pending") || b.createdAt.localeCompare(a.createdAt))
+    .sort((a, b) =>
+      Number(a.status !== "pending") - Number(b.status !== "pending") ||
+      confidenceRank[b.dateConfidence] - confidenceRank[a.dateConfidence] ||
+      b.createdAt.localeCompare(a.createdAt),
+    )
     .slice(0, 250);
 }
 
+export async function listEmployeeVisitRequests(employeeEmail: string, fetchImpl: Fetch = fetch) {
+  await ensureRequestSchema(fetchImpl);
+  const normalized = employeeEmail.trim().toLowerCase();
+  return canonicalRows(await readRows(fetchImpl))
+    .map((row) => row.request)
+    .filter((request) => {
+      if (request.requesterEmail === normalized) return true;
+      const travelerEmail = request.assignedTraveler
+        ? TRAVELER_EMAILS[request.assignedTraveler as Assignee]?.toLowerCase()
+        : null;
+      return Boolean(request.pendingChange && travelerEmail === normalized);
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 100);
+}
+
 export async function getVisitRequest(id: string, fetchImpl: Fetch = fetch) {
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
+}
+
+export async function requestVisitChange(
+  id: string,
+  change: { type: "reschedule" | "cancel"; start: string | null; end: string | null },
+  actorEmail: string,
+  fetchImpl: Fetch = fetch,
+) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  const normalizedActor = actorEmail.trim().toLowerCase();
+  if (
+    !row ||
+    !row.request.calendarEventId ||
+    row.request.status === "cancelled" ||
+    row.request.status === "denied" ||
+    row.request.requesterEmail !== normalizedActor ||
+    row.request.pendingChange
+  ) return null;
+  const now = new Date().toISOString();
+  row.values[2] = now;
+  row.values[36] = change.type;
+  row.values[37] = "pending";
+  row.values[38] = change.start ?? "";
+  row.values[39] = change.end ?? "";
+  row.values[40] = normalizedActor;
+  row.values[41] = now;
+  row.values[42] = "";
+  row.values[43] = "";
+  await updateRow(row, fetchImpl);
+  await appendAudit(id, normalizedActor, `${change.type}_requested`, {
+    start: change.start,
+    end: change.end,
+  }, fetchImpl);
+  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
+}
+
+export async function denyVisitChange(id: string, actorEmail: string, fetchImpl: Fetch = fetch) {
+  const row = await findCanonicalRow(id, fetchImpl);
+  if (!row?.request.pendingChange) return null;
+  const now = new Date().toISOString();
+  row.values[2] = now;
+  row.values[37] = "denied";
+  row.values[42] = actorEmail.trim().toLowerCase();
+  row.values[43] = now;
+  await updateRow(row, fetchImpl);
+  await appendAudit(id, actorEmail, `${row.request.pendingChange.type}_change_denied`, {}, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
@@ -324,6 +421,7 @@ export async function recordVisitReschedule(
 ) {
   const row = await findCanonicalRow(id, fetchImpl);
   if (!row || !row.request.calendarEventId || row.request.status === "cancelled" || row.request.status === "denied") return null;
+  const pendingChange = row.request.pendingChange;
   const now = new Date().toISOString();
   row.values[2] = now;
   row.values[7] = input.city;
@@ -339,8 +437,13 @@ export async function recordVisitReschedule(
   row.values[29] = input.placeId;
   row.values[30] = "reschedule";
   row.values[31] = String(row.request.lifecycleVersion + 1);
+  if (pendingChange) {
+    row.values[37] = "approved";
+    row.values[42] = actorEmail.trim().toLowerCase();
+    row.values[43] = now;
+  }
   await updateRow(row, fetchImpl);
-  await appendAudit(id, actorEmail, "rescheduled", {
+  await appendAudit(id, actorEmail, pendingChange ? "reschedule_change_approved" : "rescheduled", {
     start: input.start,
     end: input.end,
     fullAddress: input.fullAddress,
@@ -352,6 +455,7 @@ export async function recordVisitReschedule(
 export async function recordVisitCancellation(id: string, actorEmail: string, fetchImpl: Fetch = fetch) {
   const row = await findCanonicalRow(id, fetchImpl);
   if (!row || !row.request.calendarEventId || row.request.status === "cancelled" || row.request.status === "denied") return null;
+  const pendingChange = row.request.pendingChange;
   const now = new Date().toISOString();
   row.values[2] = now;
   row.values[3] = "cancelled";
@@ -361,8 +465,13 @@ export async function recordVisitCancellation(id: string, actorEmail: string, fe
   row.values[21] = "";
   row.values[30] = "cancel";
   row.values[31] = String(row.request.lifecycleVersion + 1);
+  if (pendingChange) {
+    row.values[37] = "approved";
+    row.values[42] = actorEmail.trim().toLowerCase();
+    row.values[43] = now;
+  }
   await updateRow(row, fetchImpl);
-  await appendAudit(id, actorEmail, "cancelled", { hubspotStatus: "pending" }, fetchImpl);
+  await appendAudit(id, actorEmail, pendingChange ? "cancel_change_approved" : "cancelled", { hubspotStatus: "pending" }, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
@@ -514,7 +623,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
       body: JSON.stringify({
         valueInputOption: "RAW",
         data: [
-          { range: `${REQUESTS_TAB}!A1:AG1`, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] },
+          { range: `${REQUESTS_TAB}!A1:${REQUEST_RANGE_END}1`, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] },
           { range: `${AUDIT_TAB}!A1:F1`, majorDimension: "ROWS", values: [[...AUDIT_HEADERS]] },
         ],
       }),

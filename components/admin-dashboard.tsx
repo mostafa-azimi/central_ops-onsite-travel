@@ -57,6 +57,18 @@ export function AdminDashboard({ initialRequests }: { initialRequests: StoredVis
     setConfirmCancelId("");
   }
 
+  async function decideChange(id: string, action: "approve_change" | "deny_change") {
+    setMessage(action === "approve_change" ? "Applying approved change…" : "Denying change…");
+    const response = await fetch(`/api/requests/${id}/change`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const result = (await response.json()) as { message?: string; request?: StoredVisitRequest };
+    if (result.request) setRequests((items) => items.map((item) => item.id === id ? result.request! : item));
+    setMessage(result.message ?? (response.ok ? "Change decided." : "The change could not be decided."));
+  }
+
   const pending = requests.filter((request) => request.status === "pending" && !request.calendarEventId);
   const scheduled = requests.filter((request) => request.calendarEventId && request.status !== "cancelled" && request.status !== "denied");
   return (
@@ -66,7 +78,7 @@ export function AdminDashboard({ initialRequests }: { initialRequests: StoredVis
       <div className="approval-list">
         {pending.map((request) => (
           <article className="approval-card" key={request.id}>
-            <div><h3>{request.accountName || "Account name needed"}</h3><p>{request.tripType} · {request.city}, {request.state} · {request.start} to {request.end}</p><a href={request.cashUrl} target="_blank" rel="noreferrer">CASH account {request.cashAccountId}</a></div>
+            <div><h3>{request.accountName || "Account name needed"}</h3><p>{request.tripType} · {request.city}, {request.state} · {request.start} to {request.end}</p><div className="request-badges"><span className={`confidence confidence-${request.dateConfidence}`}>{request.dateConfidence} confidence</span><span className="field-note">Requested by {request.requesterName || request.requesterEmail || "legacy request"}</span></div><a href={request.cashUrl} target="_blank" rel="noreferrer">CASH account {request.cashAccountId}</a></div>
             <div className="approval-actions">
               {request.calendarEventUrl && <a href={request.calendarEventUrl} target="_blank" rel="noreferrer">View Calendar event</a>}
               {request.syncStatus === "awaiting_hubspot" && <span className="duration">HubSpot pending</span>}
@@ -90,7 +102,8 @@ export function AdminDashboard({ initialRequests }: { initialRequests: StoredVis
       <div className="approval-list">
         {scheduled.map((request) => (
           <article className="scheduled-card" key={request.id}>
-            <div className="scheduled-summary"><div><h3>{request.accountName}</h3><p>{request.assignedTraveler} · {request.fullAddress} · {request.start} to {request.end}</p></div>{request.calendarEventUrl && <a href={request.calendarEventUrl} target="_blank" rel="noreferrer">Calendar event</a>}</div>
+            <div className="scheduled-summary"><div><h3>{request.accountName}</h3><p>{request.assignedTraveler} · {request.fullAddress} · {request.start} to {request.end}</p><span className={`confidence confidence-${request.dateConfidence}`}>{request.dateConfidence} confidence</span></div>{request.calendarEventUrl && <a href={request.calendarEventUrl} target="_blank" rel="noreferrer">Calendar event</a>}</div>
+            {request.pendingChange && <div className="change-request"><strong>{request.pendingChange.type === "cancel" ? "Requester wants to cancel" : `Requester proposed ${request.pendingChange.start} to ${request.pendingChange.end}`}</strong><span>Submitted by {request.requesterName || request.pendingChange.requestedByEmail}</span><div className="scheduled-actions"><button className="btn-primary" type="button" onClick={() => void decideChange(request.id, "approve_change")}>Approve change</button><button className="filter" type="button" onClick={() => void decideChange(request.id, "deny_change")}>Deny</button></div></div>}
             <details><summary>Reschedule visit</summary><form className="visit-form reschedule-form" onSubmit={(event) => void reschedule(request.id, event)}>
               <AddressFields />
               <label><span>Start date</span><input name="start" type="date" required defaultValue={request.start} /></label>

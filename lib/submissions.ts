@@ -2,11 +2,14 @@ import { ASSIGNEES, type Assignee } from "@/lib/types";
 
 export const TRIP_TYPES = ["Onboarding", "Central Ops onsite"] as const;
 export type TripType = (typeof TRIP_TYPES)[number];
+export const DATE_CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
+export type DateConfidence = (typeof DATE_CONFIDENCE_LEVELS)[number];
 
 export type VisitSubmission = {
   submissionId: string;
   tripType: TripType;
   traveler: Assignee;
+  dateConfidence: DateConfidence;
   accountName: string;
   cashUrl: string;
   cashAccountId: string;
@@ -21,7 +24,11 @@ export type VisitSubmission = {
   end: string;
 };
 
-export type VisitRequestSubmission = Omit<VisitSubmission, "traveler">;
+export type VisitRequestInput = Omit<VisitSubmission, "traveler">;
+export type VisitRequestSubmission = VisitRequestInput & {
+  requesterEmail: string;
+  requesterName: string;
+};
 
 export function normalizeAccountName(input: unknown) {
   const value = String(input ?? "").trim().replace(/\s+/g, " ");
@@ -50,6 +57,7 @@ export function validateVisitSubmission(input: unknown) {
   const submissionId = String(value.submissionId ?? "");
   const tripType = String(value.tripType ?? "");
   const traveler = String(value.traveler ?? "");
+  const dateConfidence = String(value.dateConfidence ?? "").toLowerCase();
   const accountName = normalizeAccountName(value.accountName);
   const cashUrl = String(value.cashUrl ?? "");
   const fullAddress = String(value.fullAddress ?? "").trim().replace(/\s+/g, " ");
@@ -66,6 +74,9 @@ export function validateVisitSubmission(input: unknown) {
   if (!/^[0-9a-f-]{20,64}$/i.test(submissionId)) return { ok: false as const, message: "Invalid submission ID." };
   if (!TRIP_TYPES.includes(tripType as TripType)) return { ok: false as const, message: "Select a valid visit type." };
   if (!ASSIGNEES.includes(traveler as Assignee)) return { ok: false as const, message: "Select an approved traveler." };
+  if (!DATE_CONFIDENCE_LEVELS.includes(dateConfidence as DateConfidence)) {
+    return { ok: false as const, message: "Select low, medium, or high date confidence." };
+  }
   if (!accountName) return { ok: false as const, message: "Enter a valid account name." };
   if (!fullAddress || fullAddress.length > 240) return { ok: false as const, message: "Enter a valid full address." };
   if (!city || city.length > 80) return { ok: false as const, message: "Enter a valid city." };
@@ -95,6 +106,7 @@ export function validateVisitSubmission(input: unknown) {
       submissionId,
       tripType: tripType as TripType,
       traveler: traveler as Assignee,
+      dateConfidence: dateConfidence as DateConfidence,
       accountName,
       cashUrl: canonicalCashUrl,
       cashAccountId,
@@ -120,9 +132,10 @@ export function validateVisitRequest(input: unknown) {
 
   const parsed = validateVisitSubmission({ ...source, traveler: "Mike Azimi" });
   if (!parsed.ok) return parsed;
-  const request: VisitRequestSubmission = {
+  const request: VisitRequestInput = {
     submissionId: parsed.value.submissionId,
     tripType: parsed.value.tripType,
+    dateConfidence: parsed.value.dateConfidence,
     accountName: parsed.value.accountName,
     cashUrl: parsed.value.cashUrl,
     cashAccountId: parsed.value.cashAccountId,
@@ -137,4 +150,22 @@ export function validateVisitRequest(input: unknown) {
     end: parsed.value.end,
   };
   return { ok: true as const, value: request };
+}
+
+export function validateVisitChange(input: unknown) {
+  if (!input || typeof input !== "object") return { ok: false as const, message: "Invalid change request." };
+  const value = input as Record<string, unknown>;
+  const action = String(value.action ?? "");
+  if (action === "request_cancel") {
+    return { ok: true as const, value: { type: "cancel" as const, start: null, end: null } };
+  }
+  if (action !== "request_reschedule") {
+    return { ok: false as const, message: "Select cancel or reschedule." };
+  }
+  const start = String(value.start ?? "");
+  const end = String(value.end ?? "");
+  if (!isDateOnly(start) || !isDateOnly(end) || end < start) {
+    return { ok: false as const, message: "Enter a valid inclusive date range." };
+  }
+  return { ok: true as const, value: { type: "reschedule" as const, start, end } };
 }

@@ -2,8 +2,9 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ASSIGNEES, type Assignee, type TravelFeed } from "@/lib/types";
+import { ASSIGNEES, TRAVELER_EMAILS, type Assignee, type TravelFeed } from "@/lib/types";
 import { AddressFields } from "@/components/address-fields";
+import type { StoredVisitRequest } from "@/lib/db";
 
 const TZ = "America/New_York";
 
@@ -62,14 +63,24 @@ function durationLabel(start: string, end: string, allDay: boolean) {
 export function TravelDashboard({
   feed,
   requestStorageConfigured,
+  employee,
+  initialRequests,
+  canAdminister,
+  initialView,
 }: {
   feed: TravelFeed;
   requestStorageConfigured: boolean;
+  employee: { email: string; name: string } | null;
+  initialRequests: StoredVisitRequest[];
+  canAdminister: boolean;
+  initialView: "schedule" | "submit";
 }) {
-  const [view, setView] = useState<"schedule" | "submit">("schedule");
+  const [view, setView] = useState<"schedule" | "submit">(initialView);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Assignee[]>([]);
   const [formStart, setFormStart] = useState("");
+  const [requests, setRequests] = useState(initialRequests);
+  const [confirmCancelId, setConfirmCancelId] = useState("");
   const [submitStatus, setSubmitStatus] = useState<{
     kind: "idle" | "working" | "success" | "error";
     message: string;
@@ -102,6 +113,7 @@ export function TravelDashboard({
     const payload = {
       submissionId: crypto.randomUUID(),
       tripType: String(form.get("tripType")),
+      dateConfidence: String(form.get("dateConfidence")),
       accountName: String(form.get("accountName")).trim(),
       cashUrl: String(form.get("cashUrl")),
       city: String(form.get("city")).trim(),
@@ -121,8 +133,9 @@ export function TravelDashboard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const result = (await response.json()) as { message?: string; requestId?: string };
+      const result = (await response.json()) as { message?: string; requestId?: string; request?: StoredVisitRequest };
       if (!response.ok) throw new Error(result.message || "The request could not be submitted.");
+      if (result.request) setRequests((items) => [result.request!, ...items.filter((item) => item.id !== result.request!.id)]);
       setSubmitStatus({
         kind: "success",
         message: `Request ${result.requestId} was submitted for approval.`,
@@ -135,6 +148,42 @@ export function TravelDashboard({
         message: error instanceof Error ? error.message : "The request could not be submitted.",
       });
     }
+  }
+
+  async function requestChange(id: string, action: "request_reschedule" | "request_cancel", start?: string, end?: string) {
+    if (action === "request_cancel" && confirmCancelId !== id) {
+      setConfirmCancelId(id);
+      setSubmitStatus({ kind: "working", message: "Click Request cancellation again to confirm." });
+      return;
+    }
+    setSubmitStatus({ kind: "working", message: action === "request_cancel" ? "Submitting cancellation…" : "Submitting new dates…" });
+    const response = await fetch(`/api/requests/${id}/change`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, start, end }),
+    });
+    const result = (await response.json()) as { message?: string; request?: StoredVisitRequest };
+    if (result.request) setRequests((items) => items.map((item) => item.id === id ? result.request! : item));
+    setSubmitStatus({ kind: response.ok ? "success" : "error", message: result.message ?? "The change request could not be submitted." });
+    setConfirmCancelId("");
+  }
+
+  async function submitReschedule(id: string, event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await requestChange(id, "request_reschedule", String(form.get("start")), String(form.get("end")));
+  }
+
+  async function decideChange(id: string, action: "approve_change" | "deny_change") {
+    setSubmitStatus({ kind: "working", message: action === "approve_change" ? "Applying approved change…" : "Denying change…" });
+    const response = await fetch(`/api/requests/${id}/change`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const result = (await response.json()) as { message?: string; request?: StoredVisitRequest };
+    if (result.request) setRequests((items) => items.map((item) => item.id === id ? result.request! : item));
+    setSubmitStatus({ kind: response.ok ? "success" : "error", message: result.message ?? "The change could not be decided." });
   }
 
   return (
@@ -223,19 +272,67 @@ export function TravelDashboard({
             {!requestStorageConfigured && (
               <div className="setup-note"><strong>Private request Sheet setup in progress</strong><span>The form validates now but will not report success until the request is saved durably.</span></div>
             )}
-            <form className="visit-form" onSubmit={submitVisit}>
-              <label><span>Visit type</span><select name="tripType" required defaultValue=""><option value="" disabled>Select a visit type</option><option>Onboarding</option><option>Central Ops onsite</option></select></label>
-              <label className="full"><span>Account name</span><input name="accountName" required maxLength={120} placeholder="Customer account name" autoComplete="organization" /></label>
-              <label className="full"><span>Customer link in CASH</span><input name="cashUrl" type="url" required placeholder="Paste the customer CASH link" /></label>
-              <AddressFields />
-              <label><span>Start date</span><input name="start" type="date" required onChange={(event) => setFormStart(event.target.value)} /></label>
-              <label><span>End date</span><input name="end" type="date" required min={formStart || undefined} /></label>
-              <div className="form-actions full">
-                <button className="btn-primary" type="submit" disabled={submitStatus.kind === "working"}>{submitStatus.kind === "working" ? "Submitting request…" : "Submit request"}</button>
-                <p>Dates are inclusive. Traveler assignment is restricted to approved administrators.</p>
+            {!employee ? (
+              <div className="employee-gate">
+                <h3>ShipHero sign-in required</h3>
+                <p>Sign in so your request and any future date or cancellation changes can be verified.</p>
+                <a className="btn-primary admin-signin" href="/api/auth/google/start?returnTo=%2F%3Fview%3Dsubmit">Sign in with Google</a>
               </div>
-            </form>
-            {submitStatus.kind !== "idle" && <div className={`submit-status ${submitStatus.kind}`} role="status">{submitStatus.message}</div>}
+            ) : (
+              <>
+                <div className="employee-session"><span>Submitting as</span><strong>{employee.name}</strong><small>{employee.email}</small></div>
+                <form className="visit-form" onSubmit={submitVisit}>
+                  <label><span>Visit type</span><select name="tripType" required defaultValue=""><option value="" disabled>Select a visit type</option><option>Onboarding</option><option>Central Ops onsite</option></select></label>
+                  <label><span>Date confidence</span><select name="dateConfidence" required defaultValue=""><option value="" disabled>How firm are these dates?</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+                  <p className="field-note full">Low means exploratory. Medium means likely. High means the customer and dates are confirmed.</p>
+                  <label className="full"><span>Account name</span><input name="accountName" required maxLength={120} placeholder="Customer account name" autoComplete="organization" /></label>
+                  <label className="full"><span>Customer link in CASH</span><input name="cashUrl" type="url" required placeholder="Paste the customer CASH link" /></label>
+                  <AddressFields />
+                  <label><span>Start date</span><input name="start" type="date" required onChange={(event) => setFormStart(event.target.value)} /></label>
+                  <label><span>End date</span><input name="end" type="date" required min={formStart || undefined} /></label>
+                  <div className="form-actions full">
+                    <button className="btn-primary" type="submit" disabled={submitStatus.kind === "working"}>{submitStatus.kind === "working" ? "Working…" : "Submit request"}</button>
+                    <p>Dates are inclusive. An administrator assigns the traveler.</p>
+                  </div>
+                </form>
+                {submitStatus.kind !== "idle" && <div className={`submit-status ${submitStatus.kind}`} role="status">{submitStatus.message}</div>}
+
+                <div className="request-history-heading"><p className="eyebrow">Your workflow</p><h3>My requests and approvals</h3></div>
+                <div className="request-history">
+                  {requests.map((request) => {
+                    const isRequester = request.requesterEmail === employee.email;
+                    const assignedEmail = request.assignedTraveler
+                      ? TRAVELER_EMAILS[request.assignedTraveler as Assignee]
+                      : null;
+                    const canDecide = canAdminister || assignedEmail === employee.email;
+                    const activeVisit = Boolean(request.calendarEventId && !["cancelled", "denied"].includes(request.status));
+                    return (
+                      <article className="request-card" key={request.id}>
+                        <div className="request-card-heading">
+                          <div><h3>{request.accountName}</h3><p>{request.start} to {request.end} · {request.assignedTraveler ?? "Traveler not assigned"}</p></div>
+                          <div className="request-badges"><span className={`confidence confidence-${request.dateConfidence}`}>{request.dateConfidence} confidence</span><span className="assignee">{request.status}</span></div>
+                        </div>
+                        {!isRequester && request.pendingChange && <p className="field-note">Change requested by {request.requesterName || request.requesterEmail}.</p>}
+                        {request.pendingChange && (
+                          <div className="change-request">
+                            <strong>{request.pendingChange.type === "cancel" ? "Cancellation requested" : `New dates: ${request.pendingChange.start} to ${request.pendingChange.end}`}</strong>
+                            <span>Waiting for the assigned traveler or an administrator.</span>
+                            {canDecide && <div className="scheduled-actions"><button className="btn-primary" type="button" onClick={() => void decideChange(request.id, "approve_change")}>Approve change</button><button className="filter" type="button" onClick={() => void decideChange(request.id, "deny_change")}>Deny</button></div>}
+                          </div>
+                        )}
+                        {isRequester && activeVisit && !request.pendingChange && (
+                          <div className="requester-actions">
+                            <details><summary>Request new dates</summary><form className="change-date-form" onSubmit={(event) => void submitReschedule(request.id, event)}><label><span>Start date</span><input name="start" type="date" required defaultValue={request.start} /></label><label><span>End date</span><input name="end" type="date" required defaultValue={request.end} /></label><button className="filter" type="submit">Submit new dates</button></form></details>
+                            <button className="danger-button" type="button" onClick={() => void requestChange(request.id, "request_cancel")}>{confirmCancelId === request.id ? "Confirm cancellation request" : "Request cancellation"}</button>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                  {requests.length === 0 && <div className="empty-state"><h3>No requests yet</h3><p>Your submitted visits and assigned change approvals will appear here.</p></div>}
+                </div>
+              </>
+            )}
           </section>
         )}
       </section>

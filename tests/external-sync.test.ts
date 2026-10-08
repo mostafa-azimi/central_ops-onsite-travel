@@ -9,6 +9,9 @@ const request: StoredVisitRequest = {
   id: "4f75767a-905d-4b80-b185-f942d659b25f",
   submissionId: "4f75767a-905d-4b80-b185-f942d659b25f",
   tripType: "Onboarding",
+  dateConfidence: "high",
+  requesterEmail: "amanda.requester@shiphero.com",
+  requesterName: "Amanda Requester",
   accountName: "GTI Properties",
   cashUrl: "https://cash.shiphero.com/client/100000",
   cashAccountId: "100000",
@@ -36,6 +39,7 @@ const request: StoredVisitRequest = {
   lifecycleAction: "create",
   lifecycleVersion: 1,
   participantsSnapshot: [],
+  pendingChange: null,
 };
 
 test("approval connection status identifies only the missing service", () => {

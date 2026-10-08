@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateVisitRequest } from "@/lib/submissions";
 import { createVisitRequest, databaseConfigured } from "@/lib/db";
+import { getEmployeeSession } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,10 @@ function rateLimited(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const employee = await getEmployeeSession();
+  if (!employee) {
+    return NextResponse.json({ message: "Verified ShipHero sign-in is required to submit a visit." }, { status: 401 });
+  }
   if (rateLimited(request)) {
     return NextResponse.json({ message: "Too many attempts. Try again later." }, { status: 429 });
   }
@@ -44,8 +49,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const saved = await createVisitRequest(parsed.value);
-    return NextResponse.json({ requestId: saved.id, status: saved.status }, { status: 201 });
+    const saved = await createVisitRequest({
+      ...parsed.value,
+      requesterEmail: employee.email,
+      requesterName: employee.name,
+    });
+    return NextResponse.json({ requestId: saved.id, status: saved.status, request: saved }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "IDEMPOTENCY_CONFLICT") {
       return NextResponse.json({ message: "That submission ID was already used for different request data." }, { status: 409 });
