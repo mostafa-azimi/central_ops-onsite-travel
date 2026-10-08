@@ -27,9 +27,11 @@ The approval path first creates one all-day Calendar event and sends an invitati
 
 After a visit is scheduled, the verified original requester can propose new inclusive dates or request cancellation. The proposal does not modify Calendar or HubSpot. It remains pending until an allowlisted administrator or the exact assigned traveler approves it. Approval updates Calendar and notifies attendees, then queues or completes the matching HubSpot lifecycle update. Denial leaves the scheduled visit unchanged. Legacy rows without a verified requester remain administrator-managed.
 
-The public request form accepts full international addresses. Key-free Photon address search fills the city, region, postal code, country code, coordinates, and OpenStreetMap place ID. Postal-code lookup uses Zippopotam.us to fill city and state or region while leaving both fields editable. Manual international entry remains available when search is unavailable. `/map` is employee-only and uses Leaflet with OpenStreetMap tiles. It defaults to North America, then fits active engagements in any other region. It lists participant names without exposing attendee emails. Any verified ShipHero employee can join or leave as a shadower; this adds or removes that employee from the Google Calendar attendees and sends Calendar updates. The assigned traveler cannot leave their own visit. Administrators can reschedule or cancel scheduled visits, and Calendar attendees are notified. Participant, reschedule, and cancellation updates are recorded as pending HubSpot lifecycle actions until the HubSpot credential is available.
+The public request form accepts manually entered international addresses. Postal-code lookup uses Zippopotam.us to fill city and state or region while leaving both fields editable, and manual entry remains available when lookup is unavailable. `/map` is employee-only and uses Leaflet with OpenStreetMap tiles. It defaults to North America, then fits active engagements in any other region. It lists participant names without exposing attendee emails. Any verified ShipHero employee can join or leave as a shadower; this adds or removes that employee from the Google Calendar attendees and sends Calendar updates. The assigned traveler cannot leave their own visit. Administrators can reschedule or cancel scheduled visits, and Calendar attendees are notified. Participant, reschedule, and cancellation updates are recorded as pending HubSpot lifecycle actions until the HubSpot credential is available.
 
-The map, address search, and postal-code lookup require no API key, billing account, or paid plan. OpenStreetMap tiles, Photon, and Zippopotam.us are best-effort services without an availability guarantee. The application uses visible OpenStreetMap attribution, loads only tiles viewed by the employee, debounces lookups, rate-limits its server endpoints, caches upstream results, and always preserves manual address entry.
+The map and postal-code lookup require no API key, billing account, or paid plan. OpenStreetMap tiles and Zippopotam.us are best-effort services without an availability guarantee. The application uses visible OpenStreetMap attribution, loads only tiles viewed by the employee, debounces lookups, rate-limits its server endpoints, caches upstream results, and always preserves manual address entry.
+
+Email notifications are best effort and never roll back a successfully saved request or Calendar action. New requests notify the administrator; approvals, denials, reschedules, cancellations, and requester change decisions notify the verified requester. Recipients are restricted to `@shiphero.com`. Delivery remains disabled until a dedicated Gmail sender grant is explicitly approved and configured.
 
 Required runtime configuration:
 
@@ -38,6 +40,8 @@ Required runtime configuration:
 - `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, and `GOOGLE_CALENDAR_REFRESH_TOKEN` for server-side Calendar event read/write
 - `HUBSPOT_ACCESS_TOKEN` with company read and meeting-create permissions
 - `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` for verified employee and administrator sign-in
+- `GOOGLE_EMAIL_CLIENT_ID`, `GOOGLE_EMAIL_CLIENT_SECRET`, and `GOOGLE_EMAIL_REFRESH_TOKEN` for approved Gmail notifications
+- optional `ADMIN_NOTIFICATION_EMAIL`, defaulting to `mike.azimi@shiphero.com`
 
 All credentials remain server-side. The application fails closed when any required connection is absent and never returns a mock write success.
 
@@ -50,6 +54,10 @@ This store is intentionally sized for a low-volume, single-administrator workflo
 ```bash
 npm install
 npm test
+npm run test:e2e
+npm run lint
 npm run build
 npm run dev
 ```
+
+The Playwright suite runs desktop and mobile Chromium flows, uses a development-only test identity gate that is disabled in production, checks accessibility with axe, and does not write to Google Calendar or the private request Sheet.

@@ -14,6 +14,7 @@ import { ApprovalError, approveVisitRequest } from "@/lib/approve-request";
 import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/google-calendar";
 import { findVerifiedCompany, hubSpotConfigured, updateHubSpotMeetingLifecycle } from "@/lib/hubspot";
 import { validateVisitSubmission } from "@/lib/submissions";
+import { notifyRequestDecision, notifyVisitUpdated } from "@/lib/email-notifications";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getAdminSession();
@@ -24,8 +25,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ message: "Invalid request ID." }, { status: 400 });
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   if (body?.action === "deny") {
-    const denied = await denyVisitRequest(id, admin.email);
+    const reason = String(body.reason ?? "").trim().replace(/\s+/g, " ");
+    if (reason.length > 500 || /[\u0000-\u001f\u007f]/.test(reason)) {
+      return NextResponse.json({ message: "Keep the denial reason under 500 characters." }, { status: 400 });
+    }
+    const denied = await denyVisitRequest(id, admin.email, fetch, reason);
     if (!denied) return NextResponse.json({ message: "Only pending requests can be denied." }, { status: 409 });
+    await notifyRequestDecision(denied, "denied", reason);
     return NextResponse.json({ request: denied });
   }
   if (body?.action === "approve") {
@@ -42,6 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         body.traveler as (typeof ASSIGNEES)[number],
         admin.email,
       );
+      await notifyRequestDecision(approved, "approved");
       const message = approved.syncStatus === "awaiting_hubspot"
         ? "Calendar event created and the assigned traveler was invited. HubSpot is pending."
         : "Request approved and synchronized.";
@@ -85,6 +92,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await updateHubSpotMeetingLifecycle(updated, company, "reschedule");
       updated = await completeVisitLifecycleHubSpot(id, admin.email) ?? updated;
     }
+    await notifyVisitUpdated(updated, "rescheduled");
     return NextResponse.json({ request: updated, message: "Calendar updated and attendees notified. HubSpot update is queued until connected." });
   }
   if (body?.action === "cancel") {
@@ -98,6 +106,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await updateHubSpotMeetingLifecycle(updated, company, "cancel");
       updated = await completeVisitLifecycleHubSpot(id, admin.email) ?? updated;
     }
+    await notifyVisitUpdated(updated, "cancelled");
     return NextResponse.json({ request: updated, message: "Calendar event cancelled and attendees notified. HubSpot cancellation is queued until connected." });
   }
   return NextResponse.json({ message: "Select approve, deny, reschedule, or cancel." }, { status: 400 });

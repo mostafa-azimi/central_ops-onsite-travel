@@ -8,12 +8,23 @@ type PostalMatch = {
   state: string;
 };
 
-export function AddressFields({ prefix = "" }: { prefix?: string }) {
+type AddressDefaults = {
+  fullAddress?: string;
+  postalCode?: string;
+  countryCode?: string;
+  city?: string;
+  state?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  placeId?: string;
+};
+
+export function AddressFields({ prefix = "", initial = {} }: { prefix?: string; initial?: AddressDefaults }) {
   const name = (field: string) => `${prefix}${field}`;
-  const [postalCode, setPostalCode] = useState("");
-  const [countryCode, setCountryCode] = useState("US");
-  const [city, setCity] = useState("");
-  const [region, setRegion] = useState("");
+  const [postalCode, setPostalCode] = useState(initial.postalCode ?? "");
+  const [countryCode, setCountryCode] = useState(initial.countryCode ?? "US");
+  const [city, setCity] = useState(initial.city ?? "");
+  const [region, setRegion] = useState(initial.state ?? "");
   const [lookupStatus, setLookupStatus] = useState<"idle" | "loading" | "success" | "no-match" | "error">("idle");
 
   useEffect(() => {
@@ -65,6 +76,7 @@ export function AddressFields({ prefix = "" }: { prefix?: string }) {
           maxLength={240}
           placeholder="2109 N US Hwy 31"
           autoComplete="off"
+          defaultValue={initial.fullAddress ?? ""}
         />
       </label>
       <label>
@@ -101,9 +113,9 @@ export function AddressFields({ prefix = "" }: { prefix?: string }) {
         <span>State, province, or region</span>
         <input name={name("state")} required maxLength={100} placeholder="AL" autoComplete="off" value={region} onChange={(event) => setRegion(event.target.value)} />
       </label>
-      <input type="hidden" name={name("latitude")} defaultValue="" />
-      <input type="hidden" name={name("longitude")} defaultValue="" />
-      <input type="hidden" name={name("placeId")} defaultValue="" />
+      <input type="hidden" name={name("latitude")} defaultValue={initial.latitude ?? ""} />
+      <input type="hidden" name={name("longitude")} defaultValue={initial.longitude ?? ""} />
+      <input type="hidden" name={name("placeId")} defaultValue={initial.placeId ?? ""} />
       <p className="field-note full" role="status" aria-live="polite">
         {lookupStatus === "loading" && "Looking up city and state…"}
         {lookupStatus === "success" && "City and state filled from the ZIP or postal code. You can edit either field."}

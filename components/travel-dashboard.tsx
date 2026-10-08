@@ -212,7 +212,7 @@ export function TravelDashboard({
         <div className="hero-inner hero-layout">
           <div>
             <p className="eyebrow">ShipHero customer success</p>
-            <h1>Central Ops Travel</h1>
+            <h1><Link className="home-title" href="/" onClick={() => setView("schedule")}>Central Ops Travel</Link></h1>
             <p className="hero-copy">Plan customer visits and keep the team aligned.</p>
           </div>
           <div className={feed.source === "live" ? "sync-pill" : "sync-pill pending"} aria-label="Calendar refresh status">

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { validateVisitRequest } from "@/lib/submissions";
 import { createVisitRequest, databaseConfigured } from "@/lib/db";
 import { getEmployeeSession } from "@/lib/admin-auth";
+import { notifyNewRequest } from "@/lib/email-notifications";
 
 export const runtime = "nodejs";
 
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
       requesterEmail: employee.email,
       requesterName: employee.name,
     });
+    await notifyNewRequest(saved);
     return NextResponse.json({ requestId: saved.id, status: saved.status, request: saved }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "IDEMPOTENCY_CONFLICT") {

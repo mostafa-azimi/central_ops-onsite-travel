@@ -41,14 +41,16 @@ export function TravelMap({
   employee,
   initialEvents,
   canAdminister,
+  initialError = "",
 }: {
   employee: EmployeeSession;
   initialEvents: EmployeeTravelEvent[];
   canAdminister: boolean;
+  initialError?: string;
 }) {
   const mapElement = useRef<HTMLDivElement>(null);
   const [workingId, setWorkingId] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(initialError);
 
   useEffect(() => {
     if (!mapElement.current) return;

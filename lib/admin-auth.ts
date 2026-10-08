@@ -3,6 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { INITIAL_ADMIN_EMAIL, isAllowedAdminEmail } from "@/lib/admin-policy";
 
 export const ADMIN_COOKIE = "central_ops_admin";
+export const E2E_AUTH_COOKIE = "central_ops_e2e_user";
 export { INITIAL_ADMIN_EMAIL };
 
 const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
@@ -17,6 +18,13 @@ export type EmployeeSession = AdminSession;
 
 export function adminAuthConfigured() {
   return Boolean(process.env.GOOGLE_OIDC_CLIENT_ID && process.env.GOOGLE_OIDC_CLIENT_SECRET);
+}
+
+function e2eSession(value: string | undefined): EmployeeSession | null {
+  if (process.env.NODE_ENV === "production" || process.env.E2E_TEST_AUTH !== "1") return null;
+  if (value === "admin") return { email: INITIAL_ADMIN_EMAIL, name: "Mike Azimi" };
+  if (value === "employee") return { email: "employee@shiphero.com", name: "ShipHero Employee" };
+  return null;
 }
 
 export async function verifyEmployeeToken(token: string | undefined): Promise<EmployeeSession | null> {
@@ -47,12 +55,15 @@ export async function verifyAdminToken(token: string | undefined): Promise<Admin
 
 export async function getEmployeeSession() {
   const store = await cookies();
-  return verifyEmployeeToken(store.get(ADMIN_COOKIE)?.value);
+  return e2eSession(store.get(E2E_AUTH_COOKIE)?.value) ?? verifyEmployeeToken(store.get(ADMIN_COOKIE)?.value);
 }
 
 export async function getAdminSession() {
   const store = await cookies();
-  return verifyAdminToken(store.get(ADMIN_COOKIE)?.value);
+  const testSession = e2eSession(store.get(E2E_AUTH_COOKIE)?.value);
+  return testSession && isAllowedAdminEmail(testSession.email)
+    ? testSession
+    : verifyAdminToken(store.get(ADMIN_COOKIE)?.value);
 }
 
 export function appOrigin(request: Request) {

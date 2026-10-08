@@ -23,6 +23,12 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
       </main>
     );
   }
-  const events = googleCalendarConfigured() ? await fetchEmployeeTravelEvents(employee.email) : [];
-  return <TravelMap employee={employee} initialEvents={events} canAdminister={isAllowedAdminEmail(employee.email)} />;
+  let calendarError = "";
+  const events = googleCalendarConfigured()
+    ? await fetchEmployeeTravelEvents(employee.email).catch(() => {
+        calendarError = "Calendar travel could not be loaded. Check the connection and refresh.";
+        return [];
+      })
+    : [];
+  return <TravelMap employee={employee} initialEvents={events} canAdminister={isAllowedAdminEmail(employee.email)} initialError={calendarError} />;
 }

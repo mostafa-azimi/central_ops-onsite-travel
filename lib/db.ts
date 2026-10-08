@@ -76,6 +76,17 @@ export function databaseConfigured() {
   );
 }
 
+export async function verifyDatabaseConnection(fetchImpl: Fetch = fetch) {
+  if (!databaseConfigured()) throw new Error("GOOGLE_SHEETS_NOT_CONFIGURED");
+  const response = await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}?fields=spreadsheetId,properties.title`,
+    { method: "GET" },
+    fetchImpl,
+  );
+  const body = (await response.json()) as { spreadsheetId?: string };
+  if (!body.spreadsheetId) throw new Error("Google Sheets health check returned no spreadsheet ID");
+}
+
 function sheetsCredential() {
   const clientId = process.env.GOOGLE_SHEETS_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_SHEETS_CLIENT_SECRET;
@@ -424,7 +435,7 @@ export async function setVisitRequestAccountName(
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
-export async function denyVisitRequest(id: string, actorEmail: string, fetchImpl: Fetch = fetch) {
+export async function denyVisitRequest(id: string, actorEmail: string, fetchImpl: Fetch = fetch, reason = "") {
   const row = await findCanonicalRow(id, fetchImpl);
   if (!row || row.request.status !== "pending") return null;
   const now = new Date().toISOString();
@@ -434,7 +445,7 @@ export async function denyVisitRequest(id: string, actorEmail: string, fetchImpl
   row.values[13] = actorEmail;
   row.values[23] = "";
   await updateRow(row, fetchImpl);
-  await appendAudit(id, actorEmail, "denied", {}, fetchImpl);
+  await appendAudit(id, actorEmail, "denied", reason ? { reason } : {}, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 

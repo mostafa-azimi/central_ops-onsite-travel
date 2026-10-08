@@ -13,6 +13,9 @@ import {
 import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/google-calendar";
 import { findVerifiedCompany, hubSpotConfigured, updateHubSpotMeetingLifecycle } from "@/lib/hubspot";
 import { validateVisitChange } from "@/lib/submissions";
+import { INITIAL_ADMIN_EMAIL } from "@/lib/admin-policy";
+import { TRAVELER_EMAILS, type Assignee } from "@/lib/types";
+import { notifyChangeDecision, notifyChangeRequested } from "@/lib/email-notifications";
 
 export const runtime = "nodejs";
 
@@ -35,6 +38,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!updated) {
       return NextResponse.json({ message: "Only the original requester can change a scheduled visit, and only one change can be pending." }, { status: 409 });
     }
+    const travelerEmail = updated.assignedTraveler
+      ? TRAVELER_EMAILS[updated.assignedTraveler as Assignee]
+      : null;
+    await notifyChangeRequested(updated, [INITIAL_ADMIN_EMAIL, ...(travelerEmail ? [travelerEmail] : [])]);
     return NextResponse.json({
       request: updated,
       message: parsed.value.type === "cancel"
@@ -54,6 +61,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (action === "deny_change") {
     const denied = await denyVisitChange(id, employee.email);
     if (!denied) return NextResponse.json({ message: "The change is no longer pending." }, { status: 409 });
+    await notifyChangeDecision(denied, "denied");
     return NextResponse.json({ request: denied, message: "Change request denied. The scheduled visit was not modified." });
   }
 
@@ -82,6 +90,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     await updateHubSpotMeetingLifecycle(updated, company, updated.lifecycleAction === "cancel" ? "cancel" : "reschedule");
     updated = await completeVisitLifecycleHubSpot(id, employee.email) ?? updated;
   }
+
+  await notifyChangeDecision(updated, "approved");
 
   return NextResponse.json({
     request: updated,
