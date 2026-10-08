@@ -253,6 +253,26 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .field-note { color: var(--text-muted); }
 .field-error { color: var(--blood); }
 :root[data-theme="dark"] .field-error { color: #ef7779; }
+.readiness-section, .visit-contact-section { margin-top: 8px; padding: 22px; border: 1px solid var(--line); background: var(--surface-muted); }
+.form-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.form-section-heading h3 { margin-top: 4px; font-size: 1.18rem; }
+.form-section-heading > span { color: var(--text-muted); font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.readiness-intro, .readiness-footnote { color: var(--text-muted); font-size: .8rem; }
+.readiness-intro { margin: 13px 0 16px; }
+.readiness-footnote { margin: 14px 0 0; }
+.readiness-groups { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.readiness-group { border: 1px solid var(--line); background: var(--surface); }
+.readiness-group h4 { padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--primary); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }
+.readiness-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; min-width: 0; margin: 0; padding: 11px 12px; border: 0; border-bottom: 1px solid var(--line); }
+.readiness-item:last-child { border-bottom: 0; }
+.readiness-item > span { color: var(--text); font-size: .82rem; font-weight: 650; line-height: 1.35; }
+.binary-options { display: flex; gap: 5px; }
+.binary-options label { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 5px 7px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
+.binary-options label:has(input:checked) { border-color: var(--gold); background: var(--gold-soft); color: var(--primary); }
+:root[data-theme="dark"] .binary-options label:has(input:checked) { background: #332812; }
+.binary-options input { width: 15px; height: 15px; margin: 0; accent-color: var(--blood); }
+.visit-form .binary-options label > span { margin: 0; color: inherit; font-size: .7rem; letter-spacing: 0; text-transform: none; }
+.visit-contact-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 .address-search { position: relative; z-index: 4; }
 .address-suggestions { position: absolute; top: calc(100% - 1px); right: 0; left: 0; z-index: 20; max-height: 260px; overflow-y: auto; margin: 0; padding: 4px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); box-shadow: var(--shadow); list-style: none; }
 .address-suggestions button { width: 100%; padding: 10px; border: 0; border-radius: 3px; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
@@ -300,6 +320,13 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .approval-list { display: grid; gap: 8px; margin-top: 18px; }
 .approval-card { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; padding: 17px; border: 1px solid var(--line); border-radius: 4px; }
 .approval-card p { margin: 6px 0; color: var(--text-muted); }
+.readiness-review { max-width: 680px; margin: 14px 0; padding: 13px 14px; border: 1px solid var(--line); background: var(--surface-muted); }
+.readiness-review-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.readiness-review-heading strong { color: var(--primary); }
+.readiness-review-heading span { color: var(--text-muted); font-size: .75rem; font-weight: 750; }
+.readiness-review p { font-size: .78rem; }
+.readiness-review summary { color: var(--blood); cursor: pointer; font-size: .78rem; font-weight: 800; }
+.readiness-review ul { display: grid; gap: 5px; margin: 9px 0 0; padding-left: 18px; color: var(--text-muted); font-size: .78rem; }
 .approval-actions { display: flex; align-items: center; gap: 8px; }
 .approval-actions select, .approval-actions input { min-width: 180px; }
 .admin-section-heading { margin-top: 40px; }
@@ -351,6 +378,10 @@ footer { padding: 0 24px 34px; color: var(--text-muted); font-size: .76rem; }
   .setup-note strong { white-space: normal; }
   .visit-form { grid-template-columns: 1fr; }
   .visit-form .full { grid-column: auto; }
+  .readiness-groups, .visit-contact-fields { grid-template-columns: 1fr; }
+  .form-section-heading { align-items: flex-start; flex-direction: column; }
+  .readiness-item { grid-template-columns: 1fr; }
+  .binary-options { justify-content: flex-start; }
   .setup-note, .form-actions { align-items: flex-start; flex-direction: column; }
   .employee-session, .request-card-heading, .requester-actions { align-items: flex-start; flex-direction: column; }
   .employee-session small { margin-left: 0; }

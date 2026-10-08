@@ -4,7 +4,9 @@ import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ASSIGNEES, TRAVELER_EMAILS, type Assignee, type TravelFeed } from "@/lib/types";
 import { AddressFields } from "@/components/address-fields";
+import { ReadinessFields } from "@/components/readiness-fields";
 import type { StoredVisitRequest } from "@/lib/db";
+import { READINESS_ITEMS } from "@/lib/submissions";
 
 const TZ = "America/New_York";
 
@@ -112,6 +114,10 @@ export function TravelDashboard({
     setSubmitStatus({ kind: "working", message: "Submitting request…" });
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const readiness = Object.fromEntries(READINESS_ITEMS.map((item) => {
+      const answer = form.get(`readiness.${item.key}`);
+      return [item.key, answer === "yes" ? true : answer === "no" ? false : null];
+    }));
     const payload = {
       submissionId: crypto.randomUUID(),
       tripType: String(form.get("tripType")),
@@ -128,6 +134,11 @@ export function TravelDashboard({
       placeId: String(form.get("placeId")),
       start: String(form.get("start")),
       end: String(form.get("end")),
+      readiness,
+      contactName: String(form.get("contactName")).trim(),
+      contactEmail: String(form.get("contactEmail")).trim(),
+      contactPhone: String(form.get("contactPhone")).trim(),
+      warehouseStartTime: String(form.get("warehouseStartTime")),
     };
 
     try {
@@ -295,6 +306,19 @@ export function TravelDashboard({
                   <AddressFields />
                   <label><span>Start date</span><input name="start" type="date" required onChange={(event) => setFormStart(event.target.value)} /></label>
                   <label><span>End date</span><input name="end" type="date" required min={formStart || undefined} /></label>
+                  <ReadinessFields />
+                  <section className="visit-contact-section full" aria-labelledby="visit-contact-heading">
+                    <div className="form-section-heading">
+                      <div><p className="eyebrow">Visit logistics</p><h3 id="visit-contact-heading">Onsite contact</h3></div>
+                      <span>All fields required</span>
+                    </div>
+                    <div className="visit-contact-fields">
+                      <label><span>Contact name</span><input name="contactName" required maxLength={120} autoComplete="name" /></label>
+                      <label><span>Contact email</span><input name="contactEmail" type="email" required maxLength={254} autoComplete="email" /></label>
+                      <label><span>Contact phone</span><input name="contactPhone" type="tel" required minLength={7} maxLength={40} autoComplete="tel" /></label>
+                      <label><span>Start time at the warehouse</span><input name="warehouseStartTime" type="time" required /></label>
+                    </div>
+                  </section>
                   <div className="form-actions full">
                     <button className="btn-primary" type="submit" disabled={submitStatus.kind === "working"}>{submitStatus.kind === "working" ? "Working…" : "Submit request"}</button>
                     <p>Dates are inclusive. An administrator assigns the traveler.</p>

@@ -64,6 +64,11 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
         longitude: claimed.longitude,
         start: claimed.start,
         endInclusive: claimed.end,
+        readiness: claimed.readiness,
+        contactName: claimed.contactName,
+        contactEmail: claimed.contactEmail,
+        contactPhone: claimed.contactPhone,
+        warehouseStartTime: claimed.warehouseStartTime,
       });
       const saved = await saveCalendarResult(claimed.id, calendar.id, calendar.htmlLink, null);
       if (!saved) throw new Error("Request changed while Calendar result was being saved");
@@ -97,6 +102,11 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
       longitude: withCalendar.longitude,
       start: withCalendar.start,
       endInclusive: withCalendar.end,
+      readiness: withCalendar.readiness,
+      contactName: withCalendar.contactName,
+      contactEmail: withCalendar.contactEmail,
+      contactPhone: withCalendar.contactPhone,
+      warehouseStartTime: withCalendar.warehouseStartTime,
     });
     const savedCompany = await saveCalendarResult(
       withCalendar.id,

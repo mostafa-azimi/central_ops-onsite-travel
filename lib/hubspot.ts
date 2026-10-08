@@ -1,5 +1,5 @@
 import type { StoredVisitRequest } from "@/lib/db";
-import { addressWithPostalCode, cashAccountIdFromLink } from "@/lib/submissions";
+import { addressWithPostalCode, cashAccountIdFromLink, readinessScore } from "@/lib/submissions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const MEETING_TO_COMPANY_ASSOCIATION = 188;
@@ -69,9 +69,9 @@ export async function findVerifiedCompany(
   return { id: company.id, name: String(properties.name ?? "Customer").trim() || "Customer", timeZone };
 }
 
-function localDateTimeUtc(date: string, hour: number, timeZone: string) {
+function localDateTimeUtc(date: string, hour: number, minute: number, timeZone: string) {
   const [year, month, day] = date.split("-").map(Number);
-  const target = Date.UTC(year, month - 1, day, hour);
+  const target = Date.UTC(year, month - 1, day, hour, minute);
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
@@ -96,10 +96,13 @@ function localDateTimeUtc(date: string, hour: number, timeZone: string) {
   return new Date(guess).toISOString();
 }
 
-export function meetingTimes(startDate: string, timeZone: string) {
+export function meetingTimes(startDate: string, timeZone: string, startTime = "09:00") {
+  const match = /^(\d{2}):(\d{2})$/.exec(startTime);
+  const hour = match ? Number(match[1]) : 9;
+  const minute = match ? Number(match[2]) : 0;
   return {
-    start: localDateTimeUtc(startDate, 9, timeZone),
-    end: localDateTimeUtc(startDate, 15, timeZone),
+    start: localDateTimeUtc(startDate, hour, minute, timeZone),
+    end: localDateTimeUtc(startDate, hour + 6, minute, timeZone),
   };
 }
 
@@ -142,7 +145,14 @@ export async function createOrGetHubSpotMeeting(
     return existing.id;
   }
 
-  const times = meetingTimes(request.start, company.timeZone);
+  const times = meetingTimes(request.start, company.timeZone, request.warehouseStartTime);
+  const readiness = readinessScore(request.readiness);
+  const meetingBody = [
+    `Point of contact: ${request.contactName} · ${request.contactEmail} · ${request.contactPhone}`,
+    `Readiness: ${readiness.ready} of ${readiness.total}`,
+    ...(readiness.blockers.length ? [`Marked No: ${readiness.blockers.map((item) => item.label).join("; ")}`] : []),
+    ...((request.participantsSnapshot ?? []).length > 0 ? [`Visit participants: ${request.participantsSnapshot.join(", ")}`] : []),
+  ].join("\n");
   const response = await fetchImpl(`${HUBSPOT_API}/crm/v3/objects/meetings`, {
     method: "POST",
     headers: headers(),
@@ -156,7 +166,7 @@ export async function createOrGetHubSpotMeeting(
         hs_meeting_external_url: calendarUrl,
         hs_meeting_outcome: "SCHEDULED",
         hs_activity_type: "On-Site",
-        ...((request.participantsSnapshot ?? []).length > 0 ? { hs_meeting_body: `Visit participants: ${request.participantsSnapshot.join(", ")}` } : {}),
+        hs_meeting_body: meetingBody,
       },
       associations: [{
         to: { id: company.id },
@@ -196,10 +206,10 @@ export async function updateHubSpotMeetingLifecycle(
   const properties: Record<string, string> = action === "cancel"
     ? { hs_meeting_outcome: "CANCELED" }
     : {
-      ...meetingTimes(request.start, company.timeZone),
-      hs_timestamp: meetingTimes(request.start, company.timeZone).start,
-      hs_meeting_start_time: meetingTimes(request.start, company.timeZone).start,
-      hs_meeting_end_time: meetingTimes(request.start, company.timeZone).end,
+      ...meetingTimes(request.start, company.timeZone, request.warehouseStartTime),
+      hs_timestamp: meetingTimes(request.start, company.timeZone, request.warehouseStartTime).start,
+      hs_meeting_start_time: meetingTimes(request.start, company.timeZone, request.warehouseStartTime).start,
+      hs_meeting_end_time: meetingTimes(request.start, company.timeZone, request.warehouseStartTime).end,
       hs_meeting_location: addressWithPostalCode(request.fullAddress, request.postalCode),
       hs_meeting_outcome: "SCHEDULED",
     };

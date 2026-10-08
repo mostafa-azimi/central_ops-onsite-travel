@@ -4,6 +4,9 @@ import { cancelCalendarEvent, createOrGetCalendarEvent, googleEventToPublic, res
 import { createOrGetHubSpotMeeting, findVerifiedCompany, meetingTimes } from "@/lib/hubspot";
 import { approvalConnectionError } from "@/lib/approve-request";
 import type { StoredVisitRequest } from "@/lib/db";
+import { READINESS_ITEMS, type ReadinessAnswers } from "@/lib/submissions";
+
+const readiness = Object.fromEntries(READINESS_ITEMS.map((item) => [item.key, true])) as ReadinessAnswers;
 
 const request: StoredVisitRequest = {
   id: "4f75767a-905d-4b80-b185-f942d659b25f",
@@ -41,6 +44,11 @@ const request: StoredVisitRequest = {
   lifecycleVersion: 1,
   participantsSnapshot: [],
   pendingChange: null,
+  readiness,
+  contactName: "Jamie Customer",
+  contactEmail: "jamie@example.com",
+  contactPhone: "+1 404 555 0100",
+  warehouseStartTime: "08:30",
 };
 
 test("approval connection status identifies only the missing service", () => {
@@ -138,6 +146,11 @@ test("Calendar creation is deterministic and keeps the all-day end exclusive", a
     postalCode: "36507",
     start: request.start,
     endInclusive: request.end,
+    readiness: request.readiness,
+    contactName: request.contactName,
+    contactEmail: request.contactEmail,
+    contactPhone: request.contactPhone,
+    warehouseStartTime: request.warehouseStartTime,
   }, fakeFetch);
 
   assert.equal(result.id, "cot4f75767a905d4b80b185f942d659b25f");
@@ -149,6 +162,8 @@ test("Calendar creation is deterministic and keeps the all-day end exclusive", a
   assert.equal(payload.location, "2109 N US Hwy 31, Bay Minette, AL, 36507");
   assert.deepEqual(payload.attendees, [{ email: "mike.azimi@shiphero.com" }]);
   assert.match(payload.description, /CASH account: https:\/\/cash\.shiphero\.com\/client\/100000/);
+  assert.match(payload.description, /Warehouse start: 08:30/);
+  assert.match(payload.description, /Readiness: 12 of 12/);
   assert.match(String(calendarCall?.url), /sendUpdates=all/);
   assert.equal(payload.extendedProperties.private.centralOpsRequestId, request.id);
 });
@@ -273,7 +288,7 @@ test("HubSpot company mapping requires one exact account and matching CASH accou
   );
 });
 
-test("HubSpot meeting uses 9 AM to 3 PM company-local time and company association 188", async () => {
+test("HubSpot meeting uses the requested warehouse time for six hours and company association 188", async () => {
   process.env.HUBSPOT_ACCESS_TOKEN = "test-token";
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -291,6 +306,10 @@ test("HubSpot meeting uses 9 AM to 3 PM company-local time and company associati
     start: "2026-10-05T16:00:00.000Z",
     end: "2026-10-05T22:00:00.000Z",
   });
+  assert.deepEqual(meetingTimes("2026-10-05", "America/New_York", "08:30"), {
+    start: "2026-10-05T12:30:00.000Z",
+    end: "2026-10-05T18:30:00.000Z",
+  });
   const id = await createOrGetHubSpotMeeting(
     request,
     { id: "56996862100", name: "GTI", timeZone: "America/New_York" },
@@ -300,9 +319,11 @@ test("HubSpot meeting uses 9 AM to 3 PM company-local time and company associati
   assert.equal(id, "meeting-123");
   const createCall = calls.find((call) => call.url.endsWith("/crm/v3/objects/meetings"));
   const payload = JSON.parse(String(createCall?.init?.body));
-  assert.equal(payload.properties.hs_timestamp, "2026-10-05T13:00:00.000Z");
-  assert.equal(payload.properties.hs_meeting_start_time, "2026-10-05T13:00:00.000Z");
-  assert.equal(payload.properties.hs_meeting_end_time, "2026-10-05T19:00:00.000Z");
+  assert.equal(payload.properties.hs_timestamp, "2026-10-05T12:30:00.000Z");
+  assert.equal(payload.properties.hs_meeting_start_time, "2026-10-05T12:30:00.000Z");
+  assert.equal(payload.properties.hs_meeting_end_time, "2026-10-05T18:30:00.000Z");
+  assert.match(payload.properties.hs_meeting_body, /Readiness: 12 of 12/);
+  assert.match(payload.properties.hs_meeting_body, /Jamie Customer/);
   assert.equal(payload.properties.hs_meeting_outcome, "SCHEDULED");
   assert.equal(payload.properties.hs_activity_type, "On-Site");
   assert.equal(payload.associations[0].types[0].associationTypeId, 188);

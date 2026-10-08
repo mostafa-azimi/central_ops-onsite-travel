@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addressWithPostalCode, cashAccountIdFromLink, inclusiveEndToExclusive, normalizeCustomerLink, validateVisitChange, validateVisitRequest, validateVisitSubmission } from "@/lib/submissions";
+import { addressWithPostalCode, cashAccountIdFromLink, inclusiveEndToExclusive, normalizeCustomerLink, READINESS_ITEMS, validateVisitChange, validateVisitRequest, validateVisitSubmission, type ReadinessAnswers } from "@/lib/submissions";
+
+const readiness = Object.fromEntries(READINESS_ITEMS.map((item) => [item.key, true])) as ReadinessAnswers;
 
 const valid = {
   submissionId: "4f75767a-905d-4b80-b185-f942d659b25f",
@@ -19,6 +21,11 @@ const valid = {
   placeId: "test-place",
   start: "2026-10-05",
   end: "2026-10-07",
+  readiness,
+  contactName: "Jamie Customer",
+  contactEmail: "jamie@example.com",
+  contactPhone: "+1 404 555 0100",
+  warehouseStartTime: "08:30",
 };
 
 test("converts inclusive visit end to Calendar end-exclusive date", () => {
@@ -80,6 +87,17 @@ test("public requests cannot assign a traveler", () => {
   const assigned = validateVisitRequest(valid);
   assert.equal(assigned.ok, false);
   if (!assigned.ok) assert.match(assigned.message, /administrator/i);
+});
+
+test("requires every readiness answer and all visit logistics fields", () => {
+  assert.equal(validateVisitSubmission({ ...valid, readiness: { ...readiness, carriersTested: false } }).ok, true);
+  const missingReadiness = { ...readiness } as Partial<ReadinessAnswers>;
+  delete missingReadiness.mobileHardwareReady;
+  assert.equal(validateVisitSubmission({ ...valid, readiness: missingReadiness }).ok, false);
+  assert.equal(validateVisitSubmission({ ...valid, contactName: "" }).ok, false);
+  assert.equal(validateVisitSubmission({ ...valid, contactEmail: "not-an-email" }).ok, false);
+  assert.equal(validateVisitSubmission({ ...valid, contactPhone: "12" }).ok, false);
+  assert.equal(validateVisitSubmission({ ...valid, warehouseStartTime: "" }).ok, false);
 });
 
 test("accepts international regions and full structured addresses", () => {

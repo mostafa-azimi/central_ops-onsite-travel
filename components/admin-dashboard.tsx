@@ -4,6 +4,28 @@ import { useState, type FormEvent } from "react";
 import { ASSIGNEES } from "@/lib/types";
 import type { StoredVisitRequest } from "@/lib/db";
 import { AddressFields } from "@/components/address-fields";
+import { READINESS_ITEMS, readinessScore } from "@/lib/submissions";
+
+function ReadinessReview({ request }: { request: StoredVisitRequest }) {
+  if (!request.readiness) return <p className="field-note">Readiness was not collected for this legacy request.</p>;
+  const score = readinessScore(request.readiness);
+  const lpnItem = READINESS_ITEMS.find((item) => item.key === "usingLpns")!;
+  return (
+    <div className="readiness-review">
+      <div className="readiness-review-heading">
+        <strong>{score.ready} of {score.total} ready</strong>
+        <span>Using LPNs: {request.readiness[lpnItem.key] ? "Yes" : "No"}</span>
+      </div>
+      <p><strong>Warehouse start:</strong> {request.warehouseStartTime} · <strong>Contact:</strong> {request.contactName}, {request.contactEmail}, {request.contactPhone}</p>
+      {score.blockers.length > 0 ? (
+        <details>
+          <summary>{score.blockers.length} {score.blockers.length === 1 ? "item" : "items"} marked No</summary>
+          <ul>{score.blockers.map((item) => <li key={item.key}>{item.label}</li>)}</ul>
+        </details>
+      ) : <p>All scored readiness items are marked Yes.</p>}
+    </div>
+  );
+}
 
 export function AdminDashboard({ initialRequests }: { initialRequests: StoredVisitRequest[] }) {
   const [requests, setRequests] = useState(initialRequests);
@@ -79,7 +101,7 @@ export function AdminDashboard({ initialRequests }: { initialRequests: StoredVis
       <div className="approval-list">
         {pending.map((request) => (
           <article className="approval-card" key={request.id}>
-            <div><h3>{request.accountName || "Account name needed"}</h3><p>{request.tripType} · {request.city}, {request.state} · {request.start} to {request.end}</p><div className="request-badges"><span className={`confidence confidence-${request.dateConfidence}`}>{request.dateConfidence} confidence</span><span className="field-note">Requested by {request.requesterName || request.requesterEmail || "legacy request"}</span></div><a href={request.cashUrl} target="_blank" rel="noreferrer">CASH account {request.cashAccountId}</a></div>
+            <div><h3>{request.accountName || "Account name needed"}</h3><p>{request.tripType} · {request.city}, {request.state} · {request.start} to {request.end}</p><div className="request-badges"><span className={`confidence confidence-${request.dateConfidence}`}>{request.dateConfidence} confidence</span><span className="field-note">Requested by {request.requesterName || request.requesterEmail || "legacy request"}</span></div><ReadinessReview request={request} /><a href={request.cashUrl} target="_blank" rel="noreferrer">CASH account {request.cashAccountId}</a></div>
             <div className="approval-actions">
               {request.calendarEventUrl && <a href={request.calendarEventUrl} target="_blank" rel="noreferrer">View Calendar event</a>}
               {request.syncStatus === "awaiting_hubspot" && <span className="duration">HubSpot pending</span>}

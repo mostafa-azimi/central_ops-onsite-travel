@@ -15,7 +15,9 @@ import {
   setVisitRequestAccountName,
   storedRequestFromValues,
 } from "@/lib/db";
-import type { VisitRequestSubmission } from "@/lib/submissions";
+import { READINESS_ITEMS, type ReadinessAnswers, type VisitRequestSubmission } from "@/lib/submissions";
+
+const readiness = Object.fromEntries(READINESS_ITEMS.map((item) => [item.key, true])) as ReadinessAnswers;
 
 const request: VisitRequestSubmission = {
   submissionId: "4f75767a-905d-4b80-b185-f942d659b25f",
@@ -36,6 +38,11 @@ const request: VisitRequestSubmission = {
   placeId: "test-place",
   start: "2026-10-05",
   end: "2026-10-07",
+  readiness,
+  contactName: "Jamie Customer",
+  contactEmail: "jamie@example.com",
+  contactPhone: "+1 404 555 0100",
+  warehouseStartTime: "08:30",
 };
 
 function configure() {
@@ -62,8 +69,8 @@ function fakeStore() {
     }
     if (init?.method === "PUT" && url.includes("Requests!")) {
       const body = JSON.parse(String(init.body)) as { range: string; values: string[][] };
-      if (body.range === "Requests!A1:AS1") return Response.json({ updatedRows: 1 });
-      const rowNumber = Number(/A(\d+):AS/.exec(body.range)?.[1]);
+      if (body.range === "Requests!A1:AX1") return Response.json({ updatedRows: 1 });
+      const rowNumber = Number(/A(\d+):AX/.exec(body.range)?.[1]);
       requests[rowNumber - 2] = [...body.values[0]];
       return Response.json({ updatedRows: 1 });
     }
@@ -100,6 +107,9 @@ test("sequential duplicate submissions are idempotent and changed payloads confl
   assert.equal(store.requests[0][33], "high");
   assert.equal(store.requests[0][34], "amanda.requester@shiphero.com");
   assert.equal(store.requests[0][44], "30303");
+  assert.deepEqual(JSON.parse(store.requests[0][45]), readiness);
+  assert.equal(store.requests[0][46], "Jamie Customer");
+  assert.equal(store.requests[0][49], "08:30");
 
   await assert.rejects(
     createVisitRequest({ ...request, city: "Boston" }, store.fakeFetch),
@@ -214,5 +224,5 @@ test("Sheet setup creates only Requests and Audit tabs with fixed headers", asyn
   const create = createBody as unknown as { sheets: Array<{ properties: { title: string } }> };
   assert.deepEqual(create.sheets.map((sheet) => sheet.properties.title), ["Requests", "Audit"]);
   const batch = batchBody as unknown as { data: Array<{ range: string }> };
-  assert.deepEqual(batch.data.map((item) => item.range), ["Requests!A1:AS1", "Audit!A1:F1"]);
+  assert.deepEqual(batch.data.map((item) => item.range), ["Requests!A1:AX1", "Audit!A1:F1"]);
 });

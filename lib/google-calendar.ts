@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { allowedAssignee, CALENDAR_ID, CALENDAR_TIME_ZONE, publicFields } from "@/lib/calendar";
-import { addressWithPostalCode, inclusiveEndToExclusive, type TripType } from "@/lib/submissions";
+import { addressWithPostalCode, inclusiveEndToExclusive, readinessScore, type ReadinessAnswers, type TripType } from "@/lib/submissions";
 import { TRAVELER_EMAILS, type Assignee, type EmployeeTravelEvent, type TravelEvent } from "@/lib/types";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -35,7 +35,24 @@ type CalendarWriteInput = {
   longitude?: number | null;
   start: string;
   endInclusive: string;
+  readiness?: ReadinessAnswers | null;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  warehouseStartTime?: string;
 };
+
+function calendarDescription(input: CalendarWriteInput) {
+  const score = input.readiness ? readinessScore(input.readiness) : null;
+  return [
+    `Visit type: ${input.tripType}`,
+    `CASH account: ${input.cashUrl}`,
+    input.warehouseStartTime ? `Warehouse start: ${input.warehouseStartTime}` : "",
+    input.contactName ? `Point of contact: ${input.contactName} · ${input.contactEmail} · ${input.contactPhone}` : "",
+    score ? `Readiness: ${score.ready} of ${score.total}` : "",
+    score?.blockers.length ? `Marked No: ${score.blockers.map((item) => item.label).join("; ")}` : "",
+  ].filter(Boolean).join("\n");
+}
 
 function employeeName(attendee: { email?: string; displayName?: string }) {
   const email = String(attendee.email ?? "").toLowerCase();
@@ -324,7 +341,7 @@ export async function createOrGetCalendarEvent(
   const payload = {
     id: eventId,
     summary: `${input.traveler}: ${input.companyName}`,
-    description: `Visit type: ${input.tripType}\nCASH account: ${input.cashUrl}`,
+    description: calendarDescription(input),
     location: input.fullAddress
       ? addressWithPostalCode(input.fullAddress, input.postalCode ?? "")
       : [input.city, input.state, input.postalCode].filter(Boolean).join(", "),

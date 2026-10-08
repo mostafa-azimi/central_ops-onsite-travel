@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
-import { normalizeAccountName, type VisitRequestSubmission } from "@/lib/submissions";
+import { normalizeAccountName, type ReadinessAnswers, type VisitRequestSubmission } from "@/lib/submissions";
 import { TRAVELER_EMAILS, type Assignee } from "@/lib/types";
 
 const SHEETS_API = "https://sheets.googleapis.com/v4";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REQUESTS_TAB = "Requests";
 const AUDIT_TAB = "Audit";
-const REQUEST_COLUMN_COUNT = 45;
-const REQUEST_RANGE_END = "AS";
+const REQUEST_COLUMN_COUNT = 50;
+const REQUEST_RANGE_END = "AX";
 type Fetch = typeof fetch;
 
 export const REQUEST_HEADERS = [
@@ -21,13 +21,15 @@ export const REQUEST_HEADERS = [
   "date_confidence", "requester_email", "requester_name", "change_type", "change_status",
   "proposed_start_date", "proposed_end_date", "change_requested_by_email", "change_requested_at",
   "change_decided_by_email", "change_decided_at", "postal_code",
+  "readiness_json", "contact_name", "contact_email", "contact_phone", "warehouse_start_time",
 ] as const;
 
 export const AUDIT_HEADERS = [
   "audit_id", "request_id", "created_at", "actor_email", "action", "details_json",
 ] as const;
 
-export type StoredVisitRequest = VisitRequestSubmission & {
+export type StoredVisitRequest = Omit<VisitRequestSubmission, "readiness"> & {
+  readiness: ReadinessAnswers | null;
   id: string;
   status: "pending" | "approved" | "denied" | "cancelled";
   createdAt: string;
@@ -123,7 +125,7 @@ function cell(values: string[], index: number) {
   return String(values[index] ?? "");
 }
 
-export function requestFingerprint(input: VisitRequestSubmission) {
+export function requestFingerprint(input: VisitRequestSubmission | StoredVisitRequest) {
   return createHash("sha256").update(JSON.stringify({
     tripType: input.tripType,
     accountName: input.accountName,
@@ -142,7 +144,21 @@ export function requestFingerprint(input: VisitRequestSubmission) {
     dateConfidence: input.dateConfidence,
     requesterEmail: input.requesterEmail,
     requesterName: input.requesterName,
+    readiness: input.readiness,
+    contactName: input.contactName,
+    contactEmail: input.contactEmail,
+    contactPhone: input.contactPhone,
+    warehouseStartTime: input.warehouseStartTime,
   })).digest("hex");
+}
+
+function readinessFromCell(value: string): ReadinessAnswers | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" ? parsed as ReadinessAnswers : null;
+  } catch {
+    return null;
+  }
 }
 
 export function storedRequestFromValues(values: string[]): StoredVisitRequest {
@@ -181,6 +197,11 @@ export function storedRequestFromValues(values: string[]): StoredVisitRequest {
     dateConfidence: (cell(values, 33) || "medium") as VisitRequestSubmission["dateConfidence"],
     requesterEmail: cell(values, 34).toLowerCase(),
     requesterName: cell(values, 35),
+    readiness: readinessFromCell(cell(values, 45)),
+    contactName: cell(values, 46),
+    contactEmail: cell(values, 47).toLowerCase(),
+    contactPhone: cell(values, 48),
+    warehouseStartTime: cell(values, 49),
     pendingChange: cell(values, 37) === "pending" && ["reschedule", "cancel"].includes(cell(values, 36))
       ? {
           type: cell(values, 36) as "reschedule" | "cancel",
@@ -215,6 +236,8 @@ function initialValues(input: VisitRequestSubmission) {
     input.longitude == null ? "" : String(input.longitude), input.placeId, "create", "1", "",
     input.dateConfidence, input.requesterEmail.toLowerCase(), input.requesterName,
     "", "", "", "", "", "", "", "", input.postalCode,
+    JSON.stringify(input.readiness), input.contactName, input.contactEmail.toLowerCase(), input.contactPhone,
+    input.warehouseStartTime,
   ];
 }
 
@@ -609,7 +632,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
     body: JSON.stringify({
       properties: { title: "Central Ops Travel Requests" },
       sheets: [
-        { properties: { title: REQUESTS_TAB, gridProperties: { frozenRowCount: 1 } } },
+        { properties: { title: REQUESTS_TAB, gridProperties: { frozenRowCount: 1, columnCount: REQUEST_COLUMN_COUNT } } },
         { properties: { title: AUDIT_TAB, gridProperties: { frozenRowCount: 1 } } },
       ],
     }),
