@@ -29,6 +29,7 @@ const request: VisitRequestSubmission = {
   fullAddress: "123 Peachtree St NE, Atlanta, GA 30303, USA",
   city: "Atlanta",
   state: "GA",
+  postalCode: "30303",
   countryCode: "US",
   latitude: 33.77,
   longitude: -84.38,
@@ -61,8 +62,8 @@ function fakeStore() {
     }
     if (init?.method === "PUT" && url.includes("Requests!")) {
       const body = JSON.parse(String(init.body)) as { range: string; values: string[][] };
-      if (body.range === "Requests!A1:AR1") return Response.json({ updatedRows: 1 });
-      const rowNumber = Number(/A(\d+):AR/.exec(body.range)?.[1]);
+      if (body.range === "Requests!A1:AS1") return Response.json({ updatedRows: 1 });
+      const rowNumber = Number(/A(\d+):AS/.exec(body.range)?.[1]);
       requests[rowNumber - 2] = [...body.values[0]];
       return Response.json({ updatedRows: 1 });
     }
@@ -98,6 +99,7 @@ test("sequential duplicate submissions are idempotent and changed payloads confl
   assert.equal(store.requests[0][11], "");
   assert.equal(store.requests[0][33], "high");
   assert.equal(store.requests[0][34], "amanda.requester@shiphero.com");
+  assert.equal(store.requests[0][44], "30303");
 
   await assert.rejects(
     createVisitRequest({ ...request, city: "Boston" }, store.fakeFetch),
@@ -212,5 +214,5 @@ test("Sheet setup creates only Requests and Audit tabs with fixed headers", asyn
   const create = createBody as unknown as { sheets: Array<{ properties: { title: string } }> };
   assert.deepEqual(create.sheets.map((sheet) => sheet.properties.title), ["Requests", "Audit"]);
   const batch = batchBody as unknown as { data: Array<{ range: string }> };
-  assert.deepEqual(batch.data.map((item) => item.range), ["Requests!A1:AR1", "Audit!A1:F1"]);
+  assert.deepEqual(batch.data.map((item) => item.range), ["Requests!A1:AS1", "Audit!A1:F1"]);
 });

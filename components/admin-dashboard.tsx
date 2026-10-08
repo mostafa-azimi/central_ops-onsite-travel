@@ -37,6 +37,7 @@ export function AdminDashboard({ initialRequests }: { initialRequests: StoredVis
         action: "reschedule",
         start: form.get("start"), end: form.get("end"),
         fullAddress: form.get("fullAddress"), city: form.get("city"), state: form.get("state"),
+        postalCode: form.get("postalCode"),
         countryCode: form.get("countryCode"), latitude: form.get("latitude"), longitude: form.get("longitude"), placeId: form.get("placeId"),
       }),
     });

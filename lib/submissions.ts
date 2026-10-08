@@ -16,6 +16,7 @@ export type VisitSubmission = {
   fullAddress: string;
   city: string;
   state: string;
+  postalCode: string;
   countryCode: string;
   latitude: number | null;
   longitude: number | null;
@@ -34,6 +35,12 @@ export function normalizeAccountName(input: unknown) {
   const value = String(input ?? "").trim().replace(/\s+/g, " ");
   if (!value || value.length > 120 || /[\u0000-\u001f\u007f]/.test(value)) return null;
   return value;
+}
+
+export function addressWithPostalCode(fullAddress: string, postalCode: string) {
+  const addressKey = fullAddress.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const postalKey = postalCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return postalKey && !addressKey.includes(postalKey) ? `${fullAddress}, ${postalCode}` : fullAddress;
 }
 
 function isDateOnly(value: string) {
@@ -64,6 +71,7 @@ export function validateVisitSubmission(input: unknown) {
   const city = String(value.city ?? "").trim();
   const rawState = String(value.state ?? value.region ?? "").trim();
   const state = rawState.length === 2 ? rawState.toUpperCase() : rawState;
+  const postalCode = String(value.postalCode ?? "").trim().toUpperCase().replace(/\s+/g, " ");
   const countryCode = String(value.countryCode ?? "").trim().toUpperCase();
   const latitudeValue = value.latitude === "" || value.latitude == null ? null : Number(value.latitude);
   const longitudeValue = value.longitude === "" || value.longitude == null ? null : Number(value.longitude);
@@ -81,6 +89,12 @@ export function validateVisitSubmission(input: unknown) {
   if (!fullAddress || fullAddress.length > 240) return { ok: false as const, message: "Enter a valid full address." };
   if (!city || city.length > 80) return { ok: false as const, message: "Enter a valid city." };
   if (!state || state.length > 100) return { ok: false as const, message: "Enter a valid state, province, or region." };
+  if (postalCode.length < 2 || postalCode.length > 16 || !/^[A-Z0-9][A-Z0-9 -]*[A-Z0-9]$/.test(postalCode)) {
+    return { ok: false as const, message: "Enter a valid ZIP or postal code." };
+  }
+  if (countryCode === "US" && !/^\d{5}(?:-\d{4})?$/.test(postalCode)) {
+    return { ok: false as const, message: "Enter a valid 5-digit US ZIP code." };
+  }
   if (!/^[A-Z]{2}$/.test(countryCode)) return { ok: false as const, message: "Select a valid country." };
   if ((latitudeValue == null) !== (longitudeValue == null)) return { ok: false as const, message: "Address coordinates are incomplete." };
   if (latitudeValue != null && (!Number.isFinite(latitudeValue) || latitudeValue < -90 || latitudeValue > 90)) {
@@ -113,6 +127,7 @@ export function validateVisitSubmission(input: unknown) {
       fullAddress,
       city,
       state,
+      postalCode,
       countryCode,
       latitude: latitudeValue,
       longitude: longitudeValue,
@@ -142,6 +157,7 @@ export function validateVisitRequest(input: unknown) {
     fullAddress: parsed.value.fullAddress,
     city: parsed.value.city,
     state: parsed.value.state,
+    postalCode: parsed.value.postalCode,
     countryCode: parsed.value.countryCode,
     latitude: parsed.value.latitude,
     longitude: parsed.value.longitude,

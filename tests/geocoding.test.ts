@@ -1,12 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeCountryCode, parsePhotonResponse, photonFeatureToSuggestion } from "@/lib/geocoding";
+import { normalizeCountryCode, normalizePostalCode, parsePhotonResponse, parsePostalResponse, photonFeatureToSuggestion, postalLookupCode } from "@/lib/geocoding";
 
 test("country codes are normalized before Photon searches", () => {
   assert.equal(normalizeCountryCode(" us "), "US");
   assert.equal(normalizeCountryCode("GB"), "GB");
   assert.equal(normalizeCountryCode("USA"), "");
   assert.equal(normalizeCountryCode("U1"), "");
+});
+
+test("postal lookups normalize codes and return city and state", () => {
+  assert.equal(normalizePostalCode(" 36507 "), "36507");
+  assert.equal(normalizePostalCode("sw1a 2aa"), "SW1A 2AA");
+  assert.equal(postalLookupCode("CA", "M5V 3A8"), "M5V");
+  assert.deepEqual(parsePostalResponse({
+    "post code": "36507",
+    "country abbreviation": "US",
+    places: [{
+      "place name": "Bay Minette",
+      "state abbreviation": "AL",
+      latitude: "30.8635",
+      longitude: "-87.7644",
+    }],
+  }, "US"), {
+    postalCode: "36507",
+    countryCode: "US",
+    city: "Bay Minette",
+    state: "AL",
+    latitude: 30.8635,
+    longitude: -87.7644,
+  });
 });
 
 test("Photon results become minimal structured international addresses", () => {
@@ -29,6 +52,7 @@ test("Photon results become minimal structured international addresses", () => {
     fullAddress: "10 Downing Street, London, England, SW1A 2AA, United Kingdom",
     city: "London",
     state: "England",
+    postalCode: "SW1A 2AA",
     countryCode: "GB",
     latitude: 51.5034,
     longitude: -0.1276,

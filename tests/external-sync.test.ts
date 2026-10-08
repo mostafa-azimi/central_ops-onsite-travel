@@ -18,6 +18,7 @@ const request: StoredVisitRequest = {
   fullAddress: "123 Peachtree St NE, Atlanta, GA 30303, USA",
   city: "Atlanta",
   state: "GA",
+  postalCode: "30303",
   countryCode: "US",
   latitude: 33.77,
   longitude: -84.38,
@@ -133,6 +134,8 @@ test("Calendar creation is deterministic and keeps the all-day end exclusive", a
     cashUrl: request.cashUrl,
     city: request.city,
     state: request.state,
+    fullAddress: "2109 N US Hwy 31, Bay Minette, AL",
+    postalCode: "36507",
     start: request.start,
     endInclusive: request.end,
   }, fakeFetch);
@@ -143,6 +146,7 @@ test("Calendar creation is deterministic and keeps the all-day end exclusive", a
   assert.deepEqual(payload.start, { date: "2026-10-05" });
   assert.deepEqual(payload.end, { date: "2026-10-08" });
   assert.equal(payload.summary, "Mike Azimi: GTI");
+  assert.equal(payload.location, "2109 N US Hwy 31, Bay Minette, AL, 36507");
   assert.deepEqual(payload.attendees, [{ email: "mike.azimi@shiphero.com" }]);
   assert.match(payload.description, /CASH account: https:\/\/cash\.shiphero\.com\/client\/100000/);
   assert.match(String(calendarCall?.url), /sendUpdates=all/);

@@ -1,4 +1,5 @@
 import type { StoredVisitRequest } from "@/lib/db";
+import { addressWithPostalCode } from "@/lib/submissions";
 
 const HUBSPOT_API = "https://api.hubapi.com";
 const MEETING_TO_COMPANY_ASSOCIATION = 188;
@@ -147,7 +148,7 @@ export async function createOrGetHubSpotMeeting(
         hs_meeting_start_time: times.start,
         hs_meeting_end_time: times.end,
         hs_meeting_title: title,
-        hs_meeting_location: request.fullAddress,
+        hs_meeting_location: addressWithPostalCode(request.fullAddress, request.postalCode),
         hs_meeting_external_url: calendarUrl,
         hs_meeting_outcome: "SCHEDULED",
         hs_activity_type: "On-Site",
@@ -195,7 +196,7 @@ export async function updateHubSpotMeetingLifecycle(
       hs_timestamp: meetingTimes(request.start, company.timeZone).start,
       hs_meeting_start_time: meetingTimes(request.start, company.timeZone).start,
       hs_meeting_end_time: meetingTimes(request.start, company.timeZone).end,
-      hs_meeting_location: request.fullAddress,
+      hs_meeting_location: addressWithPostalCode(request.fullAddress, request.postalCode),
       hs_meeting_outcome: "SCHEDULED",
     };
   delete properties.start;

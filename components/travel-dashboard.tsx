@@ -118,6 +118,7 @@ export function TravelDashboard({
       cashUrl: String(form.get("cashUrl")),
       city: String(form.get("city")).trim(),
       state: String(form.get("state")).trim(),
+      postalCode: String(form.get("postalCode")).trim(),
       fullAddress: String(form.get("fullAddress")).trim(),
       countryCode: String(form.get("countryCode")).trim().toUpperCase(),
       latitude: String(form.get("latitude")),

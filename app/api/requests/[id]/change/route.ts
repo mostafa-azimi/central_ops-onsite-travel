@@ -69,6 +69,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       start,
       endInclusive: end,
       fullAddress: current.fullAddress,
+      postalCode: current.postalCode,
       latitude: current.latitude,
       longitude: current.longitude,
     });

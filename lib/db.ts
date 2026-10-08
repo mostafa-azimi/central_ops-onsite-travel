@@ -6,8 +6,8 @@ const SHEETS_API = "https://sheets.googleapis.com/v4";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REQUESTS_TAB = "Requests";
 const AUDIT_TAB = "Audit";
-const REQUEST_COLUMN_COUNT = 44;
-const REQUEST_RANGE_END = "AR";
+const REQUEST_COLUMN_COUNT = 45;
+const REQUEST_RANGE_END = "AS";
 type Fetch = typeof fetch;
 
 export const REQUEST_HEADERS = [
@@ -20,7 +20,7 @@ export const REQUEST_HEADERS = [
   "lifecycle_action", "lifecycle_version", "participants_snapshot",
   "date_confidence", "requester_email", "requester_name", "change_type", "change_status",
   "proposed_start_date", "proposed_end_date", "change_requested_by_email", "change_requested_at",
-  "change_decided_by_email", "change_decided_at",
+  "change_decided_by_email", "change_decided_at", "postal_code",
 ] as const;
 
 export const AUDIT_HEADERS = [
@@ -132,6 +132,7 @@ export function requestFingerprint(input: VisitRequestSubmission) {
     fullAddress: input.fullAddress,
     city: input.city,
     state: input.state,
+    postalCode: input.postalCode,
     countryCode: input.countryCode,
     latitude: input.latitude,
     longitude: input.longitude,
@@ -156,6 +157,7 @@ export function storedRequestFromValues(values: string[]): StoredVisitRequest {
     fullAddress: cell(values, 25) || [cell(values, 7), cell(values, 8)].filter(Boolean).join(", "),
     city: cell(values, 7),
     state: cell(values, 8),
+    postalCode: cell(values, 44),
     countryCode: cell(values, 26) || "US",
     latitude: cell(values, 27) ? Number(cell(values, 27)) : null,
     longitude: cell(values, 28) ? Number(cell(values, 28)) : null,
@@ -212,7 +214,7 @@ function initialValues(input: VisitRequestSubmission) {
     input.fullAddress, input.countryCode, input.latitude == null ? "" : String(input.latitude),
     input.longitude == null ? "" : String(input.longitude), input.placeId, "create", "1", "",
     input.dateConfidence, input.requesterEmail.toLowerCase(), input.requesterName,
-    "", "", "", "", "", "", "", "",
+    "", "", "", "", "", "", "", "", input.postalCode,
   ];
 }
 
@@ -415,7 +417,7 @@ export async function denyVisitRequest(id: string, actorEmail: string, fetchImpl
 
 export async function recordVisitReschedule(
   id: string,
-  input: Pick<VisitRequestSubmission, "fullAddress" | "city" | "state" | "countryCode" | "latitude" | "longitude" | "placeId" | "start" | "end">,
+  input: Pick<VisitRequestSubmission, "fullAddress" | "city" | "state" | "postalCode" | "countryCode" | "latitude" | "longitude" | "placeId" | "start" | "end">,
   actorEmail: string,
   fetchImpl: Fetch = fetch,
 ) {
@@ -426,6 +428,7 @@ export async function recordVisitReschedule(
   row.values[2] = now;
   row.values[7] = input.city;
   row.values[8] = input.state;
+  row.values[44] = input.postalCode;
   row.values[9] = input.start;
   row.values[10] = input.end;
   row.values[18] = "awaiting_hubspot";

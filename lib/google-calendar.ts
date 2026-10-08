@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { allowedAssignee, CALENDAR_ID, CALENDAR_TIME_ZONE, publicFields } from "@/lib/calendar";
-import { inclusiveEndToExclusive, type TripType } from "@/lib/submissions";
+import { addressWithPostalCode, inclusiveEndToExclusive, type TripType } from "@/lib/submissions";
 import { TRAVELER_EMAILS, type Assignee, type EmployeeTravelEvent, type TravelEvent } from "@/lib/types";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -29,6 +29,7 @@ type CalendarWriteInput = {
   city: string;
   state: string;
   fullAddress?: string;
+  postalCode?: string;
   countryCode?: string;
   latitude?: number | null;
   longitude?: number | null;
@@ -263,7 +264,7 @@ export async function updateCalendarAttendance(
 
 export async function rescheduleCalendarEvent(
   eventId: string,
-  input: { start: string; endInclusive: string; fullAddress: string; latitude?: number | null; longitude?: number | null },
+  input: { start: string; endInclusive: string; fullAddress: string; postalCode?: string; latitude?: number | null; longitude?: number | null },
   fetchImpl: Fetch = fetch,
 ) {
   const { token, url, event } = await getManagedCalendarEvent(eventId, fetchImpl);
@@ -276,7 +277,7 @@ export async function rescheduleCalendarEvent(
     body: JSON.stringify({
       start: { date: input.start },
       end: { date: inclusiveEndToExclusive(input.endInclusive) },
-      location: input.fullAddress,
+      location: addressWithPostalCode(input.fullAddress, input.postalCode ?? ""),
       extendedProperties: { private: privateProperties },
     }),
     cache: "no-store",
@@ -323,7 +324,9 @@ export async function createOrGetCalendarEvent(
     id: eventId,
     summary: `${input.traveler}: ${input.companyName}`,
     description: `Visit type: ${input.tripType}\nCASH account: ${input.cashUrl}`,
-    location: input.fullAddress || [input.city, input.state].filter(Boolean).join(", "),
+    location: input.fullAddress
+      ? addressWithPostalCode(input.fullAddress, input.postalCode ?? "")
+      : [input.city, input.state, input.postalCode].filter(Boolean).join(", "),
     start: { date: input.start },
     end: { date: inclusiveEndToExclusive(input.endInclusive) },
     attendees: [{ email: travelerEmail }],

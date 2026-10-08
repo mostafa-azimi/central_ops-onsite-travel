@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inclusiveEndToExclusive, validateVisitChange, validateVisitRequest, validateVisitSubmission } from "@/lib/submissions";
+import { addressWithPostalCode, inclusiveEndToExclusive, validateVisitChange, validateVisitRequest, validateVisitSubmission } from "@/lib/submissions";
 
 const valid = {
   submissionId: "4f75767a-905d-4b80-b185-f942d659b25f",
@@ -12,6 +12,7 @@ const valid = {
   fullAddress: "123 Peachtree St NE, Atlanta, GA 30303, USA",
   city: "Atlanta",
   state: "ga",
+  postalCode: "30303",
   countryCode: "US",
   latitude: 33.77,
   longitude: -84.38,
@@ -23,6 +24,12 @@ const valid = {
 test("converts inclusive visit end to Calendar end-exclusive date", () => {
   assert.equal(inclusiveEndToExclusive("2026-10-07"), "2026-10-08");
   assert.equal(inclusiveEndToExclusive("2026-12-31"), "2027-01-01");
+});
+
+test("postal codes are validated and appended to manual addresses once", () => {
+  assert.equal(addressWithPostalCode("2109 N US Hwy 31, Bay Minette, AL", "36507"), "2109 N US Hwy 31, Bay Minette, AL, 36507");
+  assert.equal(addressWithPostalCode("123 Peachtree St, Atlanta, GA 30303", "30303"), "123 Peachtree St, Atlanta, GA 30303");
+  assert.equal(validateVisitSubmission({ ...valid, postalCode: "1234" }).ok, false);
 });
 
 test("accepts only the fixed travelers and exact CASH account path", () => {
@@ -78,6 +85,7 @@ test("accepts international regions and full structured addresses", () => {
     fullAddress: "10 Downing Street, London SW1A 2AA, UK",
     city: "London",
     state: "Greater London",
+    postalCode: "SW1A 2AA",
     countryCode: "gb",
     latitude: 51.5034,
     longitude: -0.1276,
