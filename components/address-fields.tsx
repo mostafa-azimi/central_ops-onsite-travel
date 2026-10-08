@@ -1,7 +1,59 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { normalizeCountryCode, normalizePostalCode, postalLookupCode } from "@/lib/geocoding";
+
+type PostalMatch = {
+  city: string;
+  state: string;
+};
+
 export function AddressFields({ prefix = "" }: { prefix?: string }) {
   const name = (field: string) => `${prefix}${field}`;
+  const [postalCode, setPostalCode] = useState("");
+  const [countryCode, setCountryCode] = useState("US");
+  const [city, setCity] = useState("");
+  const [region, setRegion] = useState("");
+  const [lookupStatus, setLookupStatus] = useState<"idle" | "loading" | "success" | "no-match" | "error">("idle");
+
+  useEffect(() => {
+    const normalizedCountry = normalizeCountryCode(countryCode);
+    const normalizedPostal = normalizePostalCode(postalCode);
+    const lookupLength = normalizedCountry && normalizedPostal
+      ? postalLookupCode(normalizedCountry, normalizedPostal).length
+      : 0;
+    const minimumLength = normalizedCountry === "US" ? 5 : 3;
+    if (!normalizedCountry || !normalizedPostal || lookupLength < minimumLength) {
+      setLookupStatus("idle");
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setLookupStatus("loading");
+      try {
+        const query = new URLSearchParams({ countryCode: normalizedCountry, postalCode: normalizedPostal });
+        const response = await fetch(`/api/postal?${query}`, { signal: controller.signal });
+        const body = (await response.json()) as { match?: PostalMatch | null };
+        if (!response.ok) throw new Error("Postal lookup failed");
+        if (!body.match) {
+          setLookupStatus("no-match");
+          return;
+        }
+        setCity(body.match.city);
+        setRegion(body.match.state);
+        setLookupStatus("success");
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setLookupStatus("error");
+      }
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [countryCode, postalCode]);
 
   return (
     <>
@@ -24,6 +76,8 @@ export function AddressFields({ prefix = "" }: { prefix?: string }) {
           maxLength={16}
           placeholder="36507"
           autoComplete="off"
+          value={postalCode}
+          onChange={(event) => setPostalCode(event.target.value)}
         />
       </label>
       <label>
@@ -33,23 +87,30 @@ export function AddressFields({ prefix = "" }: { prefix?: string }) {
           required
           minLength={2}
           maxLength={2}
-          defaultValue="US"
           placeholder="US"
           autoComplete="off"
+          value={countryCode}
+          onChange={(event) => setCountryCode(event.target.value.toUpperCase())}
         />
       </label>
       <label>
         <span>City</span>
-        <input name={name("city")} required maxLength={80} placeholder="Bay Minette" autoComplete="off" />
+        <input name={name("city")} required maxLength={80} placeholder="Bay Minette" autoComplete="off" value={city} onChange={(event) => setCity(event.target.value)} />
       </label>
       <label>
         <span>State, province, or region</span>
-        <input name={name("state")} required maxLength={100} placeholder="AL" autoComplete="off" />
+        <input name={name("state")} required maxLength={100} placeholder="AL" autoComplete="off" value={region} onChange={(event) => setRegion(event.target.value)} />
       </label>
       <input type="hidden" name={name("latitude")} defaultValue="" />
       <input type="hidden" name={name("longitude")} defaultValue="" />
       <input type="hidden" name={name("placeId")} defaultValue="" />
-      <p className="field-note full">Enter the address exactly as it should appear on the visit.</p>
+      <p className="field-note full" role="status" aria-live="polite">
+        {lookupStatus === "loading" && "Looking up city and state…"}
+        {lookupStatus === "success" && "City and state filled from the ZIP or postal code. You can edit either field."}
+        {lookupStatus === "no-match" && "No city or state match was found. Enter both fields manually."}
+        {lookupStatus === "error" && "City and state lookup is unavailable. Enter both fields manually."}
+        {lookupStatus === "idle" && "Enter the street address manually. ZIP or postal code fills city and state when available."}
+      </p>
     </>
   );
 }
