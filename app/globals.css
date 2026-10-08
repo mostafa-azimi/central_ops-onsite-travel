@@ -257,6 +257,9 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .address-suggestions { position: absolute; top: calc(100% - 1px); right: 0; left: 0; z-index: 20; max-height: 260px; overflow-y: auto; margin: 0; padding: 4px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); box-shadow: var(--shadow); list-style: none; }
 .address-suggestions button { width: 100%; padding: 10px; border: 0; border-radius: 3px; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
 .address-suggestions button:hover, .address-suggestions button:focus { background: var(--surface-muted); outline: none; }
+.address-no-match { padding: 10px; color: var(--text-muted); font-size: .82rem; }
+.address-manual { border-top: 1px solid var(--line); }
+.address-manual button { color: var(--accent); font-weight: 800; }
 .form-actions { display: flex; gap: 16px; align-items: center; margin-top: 3px; }
 .form-actions p, .form-actions span { margin: 0; color: var(--text-muted); font-size: .8rem; }
 .btn-primary { min-height: 42px; padding: 10px 17px; border: 1px solid var(--blood); border-radius: 4px; background: var(--blood); color: #ffffff; cursor: pointer; font-weight: 800; }

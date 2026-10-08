@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parsePhotonResponse, photonFeatureToSuggestion } from "@/lib/geocoding";
+import { normalizeCountryCode, parsePhotonResponse, photonFeatureToSuggestion } from "@/lib/geocoding";
+
+test("country codes are normalized before Photon searches", () => {
+  assert.equal(normalizeCountryCode(" us "), "US");
+  assert.equal(normalizeCountryCode("GB"), "GB");
+  assert.equal(normalizeCountryCode("USA"), "");
+  assert.equal(normalizeCountryCode("U1"), "");
+});
 
 test("Photon results become minimal structured international addresses", () => {
   const result = photonFeatureToSuggestion({

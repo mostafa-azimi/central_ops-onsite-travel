@@ -14,6 +14,11 @@ type PhotonFeature = {
   properties?: Record<string, unknown>;
 };
 
+export function normalizeCountryCode(value: unknown) {
+  const countryCode = text(value).toUpperCase();
+  return /^[A-Z]{2}$/.test(countryCode) ? countryCode : "";
+}
+
 function text(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }

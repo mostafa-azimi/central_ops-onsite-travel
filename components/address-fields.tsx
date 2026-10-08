@@ -21,23 +21,28 @@ export function AddressFields({ prefix = "" }: { prefix?: string }) {
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState("");
+  const [manualAccepted, setManualAccepted] = useState(false);
+  const [searchedQuery, setSearchedQuery] = useState("");
   const name = (field: string) => `${prefix}${field}`;
 
   useEffect(() => {
     const query = value.fullAddress.trim();
-    if (query.length < 4 || value.placeId) {
+    const countryCode = value.countryCode.trim().toUpperCase();
+    if (query.length < 4 || !/^[A-Z]{2}$/.test(countryCode) || value.placeId || manualAccepted) {
       setSuggestions([]);
       setSearching(false);
+      setSearchedQuery("");
       return;
     }
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setSearching(true);
-      void fetch(`/api/geocode?q=${encodeURIComponent(query)}`, { signal: controller.signal })
+      void fetch(`/api/geocode?q=${encodeURIComponent(query)}&countryCode=${encodeURIComponent(countryCode)}`, { signal: controller.signal })
         .then(async (response) => {
           const body = (await response.json()) as { suggestions?: AddressSuggestion[] };
           if (!response.ok) throw new Error("Address suggestions are temporarily unavailable.");
           setSuggestions(body.suggestions ?? []);
+          setSearchedQuery(query);
           setMessage("");
         })
         .catch((error: unknown) => {
@@ -48,7 +53,7 @@ export function AddressFields({ prefix = "" }: { prefix?: string }) {
         .finally(() => setSearching(false));
     }, 450);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [value.fullAddress, value.placeId]);
+  }, [value.countryCode, value.fullAddress, value.placeId, manualAccepted]);
 
   function manual(field: keyof AddressValue, nextValue: string) {
     setValue((current) => ({
@@ -56,6 +61,10 @@ export function AddressFields({ prefix = "" }: { prefix?: string }) {
       [field]: nextValue,
       ...(field === "fullAddress" ? { latitude: "", longitude: "", placeId: "" } : {}),
     }));
+    if (field === "fullAddress" || field === "countryCode") {
+      setManualAccepted(false);
+      setSearchedQuery("");
+    }
   }
 
   function choose(suggestion: AddressSuggestion) {
@@ -71,6 +80,16 @@ export function AddressFields({ prefix = "" }: { prefix?: string }) {
     setSuggestions([]);
     setMessage(suggestion.state ? "Address selected." : "Address selected. Add the state, province, or region if applicable.");
   }
+
+  function useTypedAddress() {
+    setManualAccepted(true);
+    setSuggestions([]);
+    setSearchedQuery("");
+    setMessage("Using the address exactly as entered. Confirm the city, state, and country below.");
+  }
+
+  const query = value.fullAddress.trim();
+  const showSuggestions = !value.placeId && !manualAccepted && (suggestions.length > 0 || (!searching && searchedQuery === query));
 
   return (
     <>
@@ -88,13 +107,17 @@ export function AddressFields({ prefix = "" }: { prefix?: string }) {
           aria-expanded={suggestions.length > 0}
           aria-controls={listId}
         />
-        {suggestions.length > 0 && (
+        {showSuggestions && (
           <ul className="address-suggestions" id={listId} role="listbox">
             {suggestions.map((suggestion) => (
               <li key={suggestion.placeId} role="option" aria-selected="false">
                 <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(suggestion)}>{suggestion.label}</button>
               </li>
             ))}
+            {suggestions.length === 0 && <li className="address-no-match">No exact match in the selected country.</li>}
+            <li className="address-manual" role="option" aria-selected="false">
+              <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={useTypedAddress}>Use address exactly as entered</button>
+            </li>
           </ul>
         )}
       </label>
@@ -104,7 +127,7 @@ export function AddressFields({ prefix = "" }: { prefix?: string }) {
       <input type="hidden" name={name("latitude")} value={value.latitude} />
       <input type="hidden" name={name("longitude")} value={value.longitude} />
       <input type="hidden" name={name("placeId")} value={value.placeId} />
-      <p className="field-note full">{searching ? "Searching addresses…" : message || "Address search uses OpenStreetMap data. Manual international entry is always available."}</p>
+      <p className="field-note full">{searching ? `Searching ${value.countryCode || "the selected country"}…` : message || "Suggestions use OpenStreetMap and stay within the selected country. You can always use the address exactly as entered."}</p>
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parsePhotonResponse } from "@/lib/geocoding";
+import { normalizeCountryCode, parsePhotonResponse } from "@/lib/geocoding";
 
 export const runtime = "nodejs";
 
@@ -21,11 +21,15 @@ function rateLimited(request: Request) {
 
 export async function GET(request: Request) {
   if (rateLimited(request)) return NextResponse.json({ message: "Too many address searches. Try again shortly." }, { status: 429 });
-  const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
+  const searchParams = new URL(request.url).searchParams;
+  const query = searchParams.get("q")?.trim() ?? "";
+  const countryCode = normalizeCountryCode(searchParams.get("countryCode"));
   if (query.length < 4 || query.length > 200) return NextResponse.json({ suggestions: [] });
+  if (!countryCode) return NextResponse.json({ message: "Select a valid country before searching." }, { status: 400 });
 
   const upstream = new URL("https://photon.komoot.io/api/");
   upstream.searchParams.set("q", query);
+  upstream.searchParams.set("countrycode", countryCode);
   upstream.searchParams.set("limit", "5");
   upstream.searchParams.set("lang", "en");
   try {
