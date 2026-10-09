@@ -104,7 +104,7 @@ for (let index = 0; index < scenes.length; index += 1) {
   const segment = path.join(workDir, `${basename}.mp4`);
   await page.setContent(html(scene, index), { waitUntil: "load" });
   await page.screenshot({ path: png });
-  execFileSync("/usr/bin/say", ["-v", "Samantha", "-r", "184", "-o", audio, scene.narration]);
+  execFileSync("/usr/bin/say", ["-v", "Allison", "-r", "196", "-o", audio, scene.narration]);
   const duration = audioDuration(audio) + 0.35;
   ffmpeg(["-loop", "1", "-framerate", "30", "-i", png, "-i", audio, "-vf", "scale=1280:720,format=yuv420p", "-c:v", "libx264", "-preset", "medium", "-tune", "stillimage", "-c:a", "aac", "-b:a", "128k", "-t", duration.toFixed(3), "-movflags", "+faststart", segment]);
   segmentPaths.push(segment);
