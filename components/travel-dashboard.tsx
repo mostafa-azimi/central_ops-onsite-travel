@@ -211,7 +211,7 @@ export function TravelDashboard({
       <header className="hero">
         <div className="hero-inner hero-layout">
           <div>
-            <p className="eyebrow">ShipHero customer success</p>
+            <p className="eyebrow">ShipHero Central Ops</p>
             <h1><Link className="home-title" href="/" onClick={() => setView("schedule")}>Central Ops Travel</Link></h1>
             <p className="hero-copy">Plan customer visits and keep the team aligned.</p>
           </div>

@@ -21,6 +21,7 @@ test("public schedule supports navigation, filtering, dark mode, and responsive 
   await expect(page.getByRole("heading", { name: "Request a customer visit" })).toBeVisible();
   await page.getByRole("link", { name: "Central Ops Travel" }).click();
   await expect(page).toHaveURL("/");
+  await expect(page.getByText("ShipHero Central Ops", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: /upcoming trip/ })).toBeVisible();
 
   const search = page.getByRole("searchbox", { name: "Search travel" });
