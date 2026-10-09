@@ -66,3 +66,16 @@ npm run dev
 ```
 
 The Playwright suite runs desktop and mobile Chromium flows, uses a development-only test identity gate that is disabled in production, checks accessibility with axe, and does not write to Google Calendar or the private request Sheet.
+
+## Docker and Railway
+
+The production image uses the Next.js standalone server, runs as a non-root user, listens on Railway's injected `PORT`, and exposes `/api/health` for deployment readiness checks. Build and run it locally with:
+
+```bash
+docker build -t central-ops-travel-hub .
+docker run --rm -p 3000:3000 --env-file .env.local central-ops-travel-hub
+```
+
+Railway automatically detects the root `Dockerfile`. Configure `/api/health` as the service healthcheck path. Copy the existing server-side Google Calendar, Google Sheets, Google OIDC, and optional email variables into the Railway service. Set `APP_ORIGIN` to the final HTTPS origin and add `${APP_ORIGIN}/api/auth/google/callback` to the Google web OAuth client's authorized redirect URIs before using sign-in. `NEXT_PUBLIC_SIGN_IN_ORIGIN` is an optional Docker build argument; leave it empty to use same-origin sign-in on Railway.
+
+Do not add a public Railway domain until the intended access boundary is confirmed. Railway private networking isolates services inside a Railway environment, but it does not by itself give employee browsers access. A company VPN path requires a separately approved ingress design, such as a Tailscale forwarder, or a public domain restricted to the company's VPN egress addresses with Railway edge rules.
