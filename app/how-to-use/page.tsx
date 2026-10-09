@@ -10,7 +10,7 @@ const STEPS = [
   {
     number: "01",
     title: "Sign in with ShipHero",
-    copy: "Use your verified @shiphero.com Google account. A ShipHero email address is required to submit requests, open Map View, or join a visit.",
+    copy: "Use your verified @shiphero.com Google account. A ShipHero email address is required to submit requests, open Map or Calendar View, or join a visit.",
   },
   {
     number: "02",
@@ -30,7 +30,7 @@ const STEPS = [
   {
     number: "05",
     title: "View or join on the map",
-    copy: "Open Map View to see when and where engagements are happening. Choose Join and shadow to be added to the Calendar invitation.",
+    copy: "Open Map View or Calendar View to see when and where engagements are happening. Choose Join and shadow to be added to the Calendar invitation.",
   },
   {
     number: "06",
@@ -44,8 +44,8 @@ const FAQS = [
   ["What is required to submit a visit?", "Provide the visit type, date confidence, account name, customer link, warehouse address, dates, point of contact, contact information, and warehouse start time."],
   ["Do all onboarding readiness answers have to be Yes?", "No. Every question must be answered, but No is a valid response. The answers help reviewers understand readiness and outstanding work."],
   ["What happens after I submit?", "The request enters the approval queue. An administrator reviews it and assigns a traveler. You do not need to manage that step."],
-  ["Where do approved engagements appear?", "They appear in Upcoming Travel, Map View, and the shared CS Onsite Google Calendar. The assigned traveler receives the Calendar invitation."],
-  ["How do I join or shadow a trip?", "Sign in, open Map View, select the engagement, and choose Join and shadow. You will be added to the Calendar event as an attendee."],
+  ["Where do approved engagements appear?", "They appear in Upcoming Travel, Map View, Calendar View, and the shared CS Onsite Google Calendar. The assigned traveler receives the Calendar invitation."],
+  ["How do I join or shadow a trip?", "Sign in, open Map View or Calendar View, select the engagement, and choose Join and shadow. You will be added to the Calendar event as an attendee."],
   ["Can I cancel or reschedule a visit?", "Yes. The original requester can request a cancellation or new dates. The assigned traveler or an administrator must approve the change before the Calendar event is updated."],
   ["Will the right people receive Calendar updates?", "Yes. Approved assignments, shadowing requests, reschedules, and cancellations update the shared Calendar event and its attendees."],
 ] as const;
@@ -60,6 +60,7 @@ export default function HowToUsePage() {
             <Link href="/">Upcoming travel</Link>
             <Link href="/?view=submit">Requests</Link>
             <Link href="/map">Map view</Link>
+            <Link href="/calendar">Calendar view</Link>
             <Link className="active" href="/how-to-use" aria-current="page">How to use</Link>
           </div>
         </nav>
@@ -101,7 +102,7 @@ export default function HowToUsePage() {
               <p>Open Requests, choose the visit type and date confidence, then add the customer name, customer link, warehouse address, dates, point of contact, and warehouse start time.</p>
               <p>For an onboarding onsite, answer every readiness question. A No answer is allowed. The checklist helps the team understand what still needs attention before the visit.</p>
               <p>Submit the request. The approval and assignment steps happen behind the scenes. Once approved, the engagement appears in the upcoming travel list and on the shared CS Onsite Google Calendar.</p>
-              <p>Use Map View to see when and where approved engagements are happening. Open a visit and choose Join and shadow. The Calendar invitation updates with the right people.</p>
+              <p>Use Map View or Calendar View to see when and where approved engagements are happening. Open a visit and choose Join and shadow. The Calendar invitation updates with the right people.</p>
               <p>If plans change, the original requester can request new dates or cancellation. Those changes return for approval, then the Calendar and attendees update automatically.</p>
             </div>
           </details>

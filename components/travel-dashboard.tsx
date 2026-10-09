@@ -228,6 +228,7 @@ export function TravelDashboard({
           <button type="button" className={view === "schedule" ? "active" : ""} onClick={() => setView("schedule")}>Upcoming travel</button>
           <button type="button" className={view === "submit" ? "active" : ""} onClick={() => setView("submit")}>Requests</button>
           <Link href="/map">Map view</Link>
+          <Link href="/calendar">Calendar view</Link>
           <Link href="/how-to-use">How to use</Link>
           {canAdminister && <Link href="/admin">Approvals</Link>}
         </nav>

@@ -117,6 +117,30 @@ test("verified employee can open the map and traveler legend", async ({ page }) 
   await expectAccessible(page);
 });
 
+test("verified employee can explore visits in month and week calendar views", async ({ page }, testInfo) => {
+  await authenticate(page, "employee");
+  await page.goto("/calendar");
+
+  await expect(page.getByRole("heading", { name: "Calendar view" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "October 2026" })).toBeVisible();
+  await page.getByRole("button", { name: /Cane Brew/ }).first().click();
+  const details = page.getByRole("dialog", { name: "Cane Brew" });
+  await expect(details).toContainText("Oct 8, 2026 to Oct 9, 2026");
+  await expect(details).toContainText("Mike Azimi");
+  await expect(details).toContainText("Amanda Example");
+  await expect(details.getByRole("button", { name: "Join and shadow" })).toBeEnabled();
+  await details.getByRole("button", { name: "Close visit details" }).click();
+
+  await page.getByRole("button", { name: "Week", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Week", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Sam Armenia" }).click();
+  await expect(page.getByRole("heading", { name: "No visits match this view" })).toBeVisible();
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(page.getByRole("button", { name: /Cane Brew/ }).first()).toBeVisible();
+  await expectAccessible(page);
+  await page.screenshot({ path: testInfo.outputPath("calendar-view.png"), fullPage: true });
+});
+
 test("how-to guide includes the tutorial, captions, written steps, and FAQs", async ({ page, request }, testInfo) => {
   await page.goto("/how-to-use");
   await expect(page).toHaveTitle("How to use Central Ops Travel");
