@@ -47,6 +47,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <nav className="view-tabs" aria-label="Travel workspace">
           <Link href="/?view=submit">Requests</Link>
           <Link href="/map">Map view</Link>
+          <Link href="/how-to-use">How to use</Link>
           <Link href="/admin" className="active" aria-current="page">Approvals</Link>
         </nav>
         <div className="admin-header">

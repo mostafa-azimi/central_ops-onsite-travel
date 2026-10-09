@@ -112,6 +112,7 @@ export function TravelMap({
       <nav className="view-tabs map-workspace-nav" aria-label="Travel workspace">
         <Link href="/?view=submit">Requests</Link>
         <Link href="/map" className="active" aria-current="page">Map view</Link>
+        <Link href="/how-to-use">How to use</Link>
         {canAdminister && <Link href="/admin">Approvals</Link>}
       </nav>
       {message && <div className="submit-status error" role="status">{message}</div>}

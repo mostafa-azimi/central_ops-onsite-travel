@@ -19,6 +19,10 @@ The server prefers the authenticated Google Calendar API when `GOOGLE_CALENDAR_C
 
 The public schedule remains anonymous, but submitting a visit requires a verified `@shiphero.com` Google session. The server records the verified requester name and email rather than trusting identity fields from the browser. The form records low, medium, or high date confidence, and the administrator queue orders pending requests by confidence. A requester cannot choose a traveler. The API rejects any request payload containing a traveler field. The customer-link field accepts ordinary HTTP or HTTPS links and safely upgrades bare domains to HTTPS. It never fetches the submitted link and rejects credentials, unsafe protocols, whitespace, and malformed text. Known `cash.shiphero.com/client/{numeric account ID}` paths still provide a deterministic account ID for future HubSpot matching. Other valid links remain pending for HubSpot rather than blocking Calendar approval. The account name is used in the Calendar event title, while the submitted customer link is included in the private Calendar description.
 
+## User guide
+
+`/how-to-use` is a public onboarding guide with a 71-second narrated walkthrough, selectable English captions, an inline transcript, written documentation, an automatic Calendar workflow summary, and frequently asked questions. The tutorial uses mock customer information and does not expose Calendar or request data. `npm run video:build` reproduces the MP4, poster, and WebVTT caption file locally using Playwright, macOS text-to-speech, and the development-only FFmpeg package.
+
 Traveler assignment, approval, denial, and direct scheduling live on `/admin`. Google OpenID Connect is verified server-side against Google's signing keys, and the verified email must be in the exact server-side allowlist. The initial allowed administrator is `mike.azimi@shiphero.com`; all other accounts are denied by default. The existing direct-schedule endpoint also requires a verified administrator session.
 
 Google administrator sign-in requires a separate web OAuth client with redirect URI `https://cs-onsite-travel.vercel.app/api/auth/google/callback` and environment variables `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Administrator access is hard-coded to `mike.azimi@shiphero.com`; all other verified employees are denied. Until OAuth and durable storage are configured, the public request and administrator actions fail closed and never return mock success.
@@ -53,6 +57,7 @@ This store is intentionally sized for a low-volume, single-administrator workflo
 
 ```bash
 npm install
+npm run video:build
 npm test
 npm run test:e2e
 npm run lint

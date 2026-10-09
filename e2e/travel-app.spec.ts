@@ -115,3 +115,28 @@ test("verified employee can open the map and traveler legend", async ({ page }) 
   await expect(page.getByText("Pinch or scroll over the map to zoom.")).toBeVisible();
   await expectAccessible(page);
 });
+
+test("how-to guide includes the tutorial, captions, written steps, and FAQs", async ({ page, request }, testInfo) => {
+  await page.goto("/how-to-use");
+  await expect(page).toHaveTitle("How to use Central Ops Travel");
+  await expect(page.getByRole("heading", { name: "Plan and join customer visits" })).toBeVisible();
+  await expect(page.getByText("A verified ShipHero email address is required.")).toBeVisible();
+  await expect(page.locator("video source")).toHaveAttribute("src", "/tutorial/central-ops-travel.mp4");
+  await expect(page.locator("video track[kind='captions']")).toHaveAttribute("src", "/tutorial/central-ops-travel.vtt");
+  await expect(page.getByRole("heading", { name: "How the workflow works" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Answers before you start" })).toBeVisible();
+  await page.getByText("Who can use Central Ops Travel?").click();
+  await expect(page.getByText("Only people signed in with a verified @shiphero.com Google account")).toBeVisible();
+
+  const [videoResponse, captionResponse] = await Promise.all([
+    request.get("/tutorial/central-ops-travel.mp4"),
+    request.get("/tutorial/central-ops-travel.vtt"),
+  ]);
+  expect(videoResponse.ok()).toBe(true);
+  expect(videoResponse.headers()["content-type"]).toContain("video/mp4");
+  expect((await videoResponse.body()).byteLength).toBeGreaterThan(1_000_000);
+  expect(captionResponse.ok()).toBe(true);
+  expect(await captionResponse.text()).toContain("WEBVTT");
+  await expectAccessible(page);
+  await page.screenshot({ path: testInfo.outputPath("how-to-use.png"), fullPage: true });
+});
