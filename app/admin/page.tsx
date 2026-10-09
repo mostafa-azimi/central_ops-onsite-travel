@@ -5,6 +5,7 @@ import { AdminDashboard } from "@/components/admin-dashboard";
 import { googleCalendarConfigured } from "@/lib/google-calendar";
 import { hubSpotConfigured } from "@/lib/hubspot";
 import { ConnectorHealthPanel } from "@/components/connector-health-panel";
+import { googleSignInHref } from "@/lib/auth-links";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <p>Sign in as {INITIAL_ADMIN_EMAIL} to review requests, assign travelers, and schedule visits.</p>
           {error && <div className="submit-status error">That Google account is not authorized.</div>}
           {adminAuthConfigured() ? (
-            <a className="btn-primary admin-signin" href="/api/auth/google/start">Sign in with Google</a>
+            <a className="btn-primary admin-signin" href={googleSignInHref()}>Sign in with Google</a>
           ) : (
             <div className="setup-note"><strong>Google sign-in setup pending</strong><span>No approval actions are available until the dedicated web OAuth client is configured.</span></div>
           )}

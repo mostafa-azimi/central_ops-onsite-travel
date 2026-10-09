@@ -3,6 +3,7 @@ import { adminAuthConfigured, getEmployeeSession } from "@/lib/admin-auth";
 import { fetchEmployeeTravelEvents, googleCalendarConfigured } from "@/lib/google-calendar";
 import { TravelMap } from "@/components/travel-map";
 import { isAllowedAdminEmail } from "@/lib/admin-policy";
+import { googleSignInHref } from "@/lib/auth-links";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
           <h1>Map view</h1>
           <p>Sign in with a verified @shiphero.com Google account to view traveler names and join a customer visit.</p>
           {error && <div className="submit-status error">Use a verified @shiphero.com Google account.</div>}
-          {adminAuthConfigured() && <a className="btn-primary admin-signin" href="/api/auth/google/start?returnTo=/map">Sign in with Google</a>}
+          {adminAuthConfigured() && <a className="btn-primary admin-signin" href={googleSignInHref("/map")}>Sign in with Google</a>}
           <Link href="/">Back to public travel</Link>
         </section>
       </main>

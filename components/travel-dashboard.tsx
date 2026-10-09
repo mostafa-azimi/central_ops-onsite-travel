@@ -7,6 +7,7 @@ import { AddressFields } from "@/components/address-fields";
 import { ReadinessFields } from "@/components/readiness-fields";
 import type { StoredVisitRequest } from "@/lib/db";
 import { READINESS_ITEMS } from "@/lib/submissions";
+import { googleSignInHref } from "@/lib/auth-links";
 
 const TZ = "America/New_York";
 
@@ -298,7 +299,7 @@ export function TravelDashboard({
               <div className="employee-gate">
                 <h3>ShipHero sign-in required</h3>
                 <p>Sign in so your request and any future date or cancellation changes can be verified.</p>
-                <a className="btn-primary admin-signin" href="/api/auth/google/start?returnTo=%2F%3Fview%3Dsubmit">Sign in with Google</a>
+                <a className="btn-primary admin-signin" href={googleSignInHref("/?view=submit")}>Sign in with Google</a>
               </div>
             ) : (
               <>
