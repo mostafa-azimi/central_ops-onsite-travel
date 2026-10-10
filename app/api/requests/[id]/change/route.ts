@@ -4,15 +4,15 @@ import { canApproveVisitChange } from "@/lib/change-policy";
 import {
   databaseConfigured,
   denyVisitChange,
+  findActiveTravelerByName,
   getVisitRequest,
+  listActiveAdminEmails,
   recordVisitCancellation,
   recordVisitReschedule,
   requestVisitChange,
 } from "@/lib/db";
 import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/google-calendar";
 import { validateVisitChange } from "@/lib/submissions";
-import { INITIAL_ADMIN_EMAIL } from "@/lib/admin-policy";
-import { TRAVELER_EMAILS, type Assignee } from "@/lib/types";
 import { notifyChangeDecision, notifyChangeRequested } from "@/lib/email-notifications";
 
 export const runtime = "nodejs";
@@ -37,9 +37,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ message: "Only the original requester can change a scheduled visit, and only one change can be pending." }, { status: 409 });
     }
     const travelerEmail = updated.assignedTraveler
-      ? TRAVELER_EMAILS[updated.assignedTraveler as Assignee]
+      ? (await findActiveTravelerByName(updated.assignedTraveler))?.email
       : null;
-    await notifyChangeRequested(updated, [INITIAL_ADMIN_EMAIL, ...(travelerEmail ? [travelerEmail] : [])]);
+    await notifyChangeRequested(updated, [...await listActiveAdminEmails(), ...(travelerEmail ? [travelerEmail] : [])]);
     return NextResponse.json({
       request: updated,
       message: parsed.value.type === "cancel"
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ message: "Select a valid change action." }, { status: 400 });
   }
   if (!current.pendingChange) return NextResponse.json({ message: "No change is awaiting approval." }, { status: 409 });
-  if (!canApproveVisitChange(current, employee.email)) {
+  if (!await canApproveVisitChange(current, employee.email)) {
     return NextResponse.json({ message: "Only an administrator or the assigned traveler can decide this change." }, { status: 403 });
   }
 

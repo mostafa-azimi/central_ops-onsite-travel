@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { EmployeeSession } from "@/lib/admin-auth";
 import type { AddressSuggestion } from "@/lib/geocoding";
-import { ASSIGNEES, TRAVELER_EMAILS, type EmployeeTravelEvent } from "@/lib/types";
-import { TRAVELER_MAP_COLORS, travelerColorClass } from "@/lib/traveler-colors";
+import type { EmployeeTravelEvent, TravelerProfile } from "@/lib/types";
+import { travelerColor } from "@/lib/traveler-colors";
 
 type Coordinate = { lat: number; lng: number };
 
@@ -41,11 +41,13 @@ export function TravelMap({
   employee,
   initialEvents,
   canAdminister,
+  travelers,
   initialError = "",
 }: {
   employee: EmployeeSession;
   initialEvents: EmployeeTravelEvent[];
   canAdminister: boolean;
+  travelers: TravelerProfile[];
   initialError?: string;
 }) {
   const mapElement = useRef<HTMLDivElement>(null);
@@ -75,7 +77,7 @@ export function TravelMap({
           : "";
         const marker = L.marker([position.lat, position.lng], {
           title: `${event.customer}: ${[event.assignee, ...event.participants].join(", ")}`,
-          icon: L.divIcon({ className: `travel-pin ${travelerColorClass(event.assignee)}`, html: '<span aria-hidden="true"></span>', iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -32] }),
+          icon: L.divIcon({ className: "travel-pin", html: `<span aria-hidden="true" style="background:${travelerColor(event.assignee, travelers)}"></span>`, iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -32] }),
         }).addTo(map);
         marker.bindPopup(`<div class="map-popup"><strong>${escapeHtml(event.customer)}</strong><br>${escapeHtml(event.location)}<br><span>Dates: ${escapeHtml(dateRange(event))}</span><br><span>Traveler: ${escapeHtml(event.assignee)}</span>${joiningLine}</div>`);
         bounds.extend([position.lat, position.lng]);
@@ -83,7 +85,7 @@ export function TravelMap({
       if (bounds.isValid()) map.fitBounds(bounds.pad(0.18), { maxZoom: 7 });
     }).catch(() => setMessage("The interactive map could not load. The visit list is still available."));
     return () => { active = false; destroy?.(); };
-  }, [initialEvents]);
+  }, [initialEvents, travelers]);
 
   async function attendance(event: EmployeeTravelEvent) {
     setWorkingId(event.calendarEventId);
@@ -114,7 +116,7 @@ export function TravelMap({
         <Link href="/map" className="active" aria-current="page">Map view</Link>
         <Link href="/calendar">Calendar view</Link>
         <Link href="/how-to-use">How to use</Link>
-        {canAdminister && <Link href="/admin">Approvals</Link>}
+        {canAdminister && <><Link href="/admin">Approvals</Link><Link href="/admin/settings">Admin settings</Link></>}
       </nav>
       {message && <div className="submit-status error" role="status">{message}</div>}
       <section className="map-layout">
@@ -123,10 +125,10 @@ export function TravelMap({
           <aside className="map-legend" aria-label="Traveler map colors">
             <strong>Traveler colors</strong>
             <ul>
-              {ASSIGNEES.map((assignee) => (
-                <li key={assignee}>
-                  <span className="map-legend-dot" style={{ backgroundColor: TRAVELER_MAP_COLORS[assignee] }} aria-hidden="true" />
-                  <span>{assignee}</span>
+              {travelers.map((person) => (
+                <li key={person.email}>
+                  <span className="map-legend-dot" style={{ backgroundColor: person.color }} aria-hidden="true" />
+                  <span>{person.name}</span>
                 </li>
               ))}
             </ul>
@@ -135,7 +137,7 @@ export function TravelMap({
         <div className="map-visits">
           <div className="map-visits-heading"><h2>{initialEvents.length} active {initialEvents.length === 1 ? "visit" : "visits"}</h2><p>North America is the default view. Pinch or scroll over the map to zoom.</p></div>
           {initialEvents.map((event) => {
-            const isPrimaryTraveler = TRAVELER_EMAILS[event.assignee].toLowerCase() === employee.email.toLowerCase();
+            const isPrimaryTraveler = travelers.find((person) => person.name === event.assignee)?.email.toLowerCase() === employee.email.toLowerCase();
             return (
               <article className="map-visit-card" key={event.calendarEventId}>
                 <div><h3>{event.customer}</h3><p>{dateRange(event)}</p><p>{event.location || "Location pending"}</p><p><strong>Traveler:</strong> {event.assignee}</p></div>

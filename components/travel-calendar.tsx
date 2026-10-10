@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { EmployeeSession } from "@/lib/admin-auth";
 import { addDays, calendarEventDayKeys, dateKey, eventsByDay, monthGrid, startOfWeek, weekGrid } from "@/lib/calendar-view";
-import { ASSIGNEES, TRAVELER_EMAILS, type Assignee, type EmployeeTravelEvent } from "@/lib/types";
-import { TRAVELER_MAP_COLORS } from "@/lib/traveler-colors";
+import type { Assignee, EmployeeTravelEvent, TravelerProfile } from "@/lib/types";
+import { travelerColor } from "@/lib/traveler-colors";
 
 type CalendarMode = "month" | "week";
 
@@ -73,11 +73,13 @@ export function TravelCalendar({
   employee,
   initialEvents,
   canAdminister,
+  travelers,
   initialError = "",
 }: {
   employee: EmployeeSession;
   initialEvents: EmployeeTravelEvent[];
   canAdminister: boolean;
+  travelers: TravelerProfile[];
   initialError?: string;
 }) {
   const [mode, setMode] = useState<CalendarMode>("month");
@@ -145,7 +147,7 @@ export function TravelCalendar({
         <Link href="/map">Map view</Link>
         <Link href="/calendar" className="active" aria-current="page">Calendar view</Link>
         <Link href="/how-to-use">How to use</Link>
-        {canAdminister && <Link href="/admin">Approvals</Link>}
+        {canAdminister && <><Link href="/admin">Approvals</Link><Link href="/admin/settings">Admin settings</Link></>}
       </nav>
 
       {message && <div className="submit-status error calendar-status" role="status">{message}</div>}
@@ -166,11 +168,12 @@ export function TravelCalendar({
       <section className="calendar-filter-bar" aria-label="Filter visits by traveler">
         <span>Travelers</span>
         <div className="calendar-filter-list">
-          {ASSIGNEES.map((assignee) => {
+          {travelers.map((person) => {
+            const assignee = person.name;
             const active = selectedAssignees.includes(assignee);
             return (
               <button key={assignee} type="button" className={active ? "calendar-person-filter active" : "calendar-person-filter"} aria-pressed={active} onClick={() => toggleAssignee(assignee)}>
-                <span style={{ backgroundColor: TRAVELER_MAP_COLORS[assignee] }} aria-hidden="true" />
+                <span style={{ backgroundColor: person.color }} aria-hidden="true" />
                 {assignee}
               </button>
             );
@@ -195,7 +198,7 @@ export function TravelCalendar({
                     {dayEvents.map((event) => {
                       const spanDays = calendarEventDayKeys(event);
                       const isContinuation = day !== spanDays[0];
-                      const style = { "--traveler-color": TRAVELER_MAP_COLORS[event.assignee] } as CSSProperties;
+                      const style = { "--traveler-color": travelerColor(event.assignee, travelers) } as CSSProperties;
                       return (
                         <button className={`calendar-event${isContinuation ? " continuation" : ""}`} style={style} type="button" key={`${day}-${event.calendarEventId}`} onClick={() => setSelectedEvent(event)}>
                           <span>{eventTime(event)}</span>
@@ -220,7 +223,7 @@ export function TravelCalendar({
         <div className="calendar-dialog-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target) setSelectedEvent(null); }}>
           <section className="calendar-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-event-title">
             <button className="calendar-dialog-close" type="button" onClick={() => setSelectedEvent(null)} aria-label="Close visit details">×</button>
-            <span className="calendar-dialog-accent" style={{ backgroundColor: TRAVELER_MAP_COLORS[selectedEvent.assignee] }} aria-hidden="true" />
+            <span className="calendar-dialog-accent" style={{ backgroundColor: travelerColor(selectedEvent.assignee, travelers) }} aria-hidden="true" />
             <p className="eyebrow">Approved customer visit</p>
             <h2 id="calendar-event-title">{selectedEvent.customer}</h2>
             <dl>
@@ -230,7 +233,7 @@ export function TravelCalendar({
               <div><dt>Joining</dt><dd>{selectedEvent.participants.length > 0 ? selectedEvent.participants.join(", ") : "No additional teammates"}</dd></div>
             </dl>
             {(() => {
-              const isPrimaryTraveler = TRAVELER_EMAILS[selectedEvent.assignee].toLowerCase() === employee.email.toLowerCase();
+              const isPrimaryTraveler = travelers.find((person) => person.name === selectedEvent.assignee)?.email.toLowerCase() === employee.email.toLowerCase();
               return (
                 <button className={selectedEvent.joined || isPrimaryTraveler ? "filter active" : "btn-primary"} type="button" disabled={isPrimaryTraveler || workingId === selectedEvent.calendarEventId} onClick={() => void attendance(selectedEvent)}>
                   {isPrimaryTraveler ? "Assigned traveler" : workingId === selectedEvent.calendarEventId ? "Updating…" : selectedEvent.joined ? "Leave visit" : "Join and shadow"}

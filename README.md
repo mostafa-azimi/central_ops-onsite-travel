@@ -23,9 +23,9 @@ The public schedule remains anonymous, but submitting a visit requires a verifie
 
 `/how-to-use` is a public onboarding guide with a 71-second narrated walkthrough, selectable English captions, an inline transcript, written documentation, an automatic Calendar workflow summary, and frequently asked questions. The tutorial uses mock customer information and does not expose Calendar or request data. `npm run video:build` reproduces the MP4, poster, and WebVTT caption file locally using Playwright, macOS text-to-speech, and the development-only FFmpeg package.
 
-Traveler assignment, approval, denial, and direct scheduling live on `/admin`. Google OpenID Connect is verified server-side against Google's signing keys, and the verified email must be in the exact server-side allowlist. The initial allowed administrator is `mike.azimi@shiphero.com`; all other accounts are denied by default. The existing direct-schedule endpoint also requires a verified administrator session.
+Traveler assignment, approval, denial, and direct scheduling live on `/admin`. Google OpenID Connect is verified server-side against Google's signing keys, and the verified email must be an active administrator in the private people directory. The directory is managed at `/admin/settings`; administrators can add or deactivate exact `@shiphero.com` identities and grant traveler, administrator, or both roles. The initial administrator is `mike.azimi@shiphero.com`, the last active administrator cannot remove their own administrative access, and every directory change is written to the private audit log. The existing direct-schedule endpoint also requires a verified administrator session.
 
-Google administrator sign-in requires a separate web OAuth client with redirect URI `https://central-ops-travel-hub.vercel.app/api/auth/google/callback` and environment variables `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Administrator access is hard-coded to `mike.azimi@shiphero.com`; all other verified employees are denied. Until OAuth and durable storage are configured, the public request and administrator actions fail closed and never return mock success.
+Google administrator sign-in requires a separate web OAuth client with redirect URI `https://central-ops-travel-hub.vercel.app/api/auth/google/callback` and environment variables `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Administrator access is loaded from the private Sheet-backed people directory and fails closed if that configured directory cannot be read. Until OAuth and durable storage are configured, the public request and administrator actions fail closed and never return mock success.
 
 The approval path creates one all-day Calendar event and sends an invitation to the assigned traveler. Calendar end dates are stored end-exclusive. A deterministic Google event ID makes retries recoverable without creating duplicate events or invitations. The private Google Sheet persists synchronization state, Calendar IDs, errors, decisions, and audit rows before an approval is marked complete. The public browser never receives the Sheet ID, OAuth credential, audit data, or raw rows.
 
@@ -35,13 +35,13 @@ The public request form accepts manually entered international addresses. Postal
 
 The map and postal-code lookup require no API key, billing account, or paid plan. OpenStreetMap tiles and Zippopotam.us are best-effort services without an availability guarantee. The application uses visible OpenStreetMap attribution, loads only tiles viewed by the employee, debounces lookups, rate-limits its server endpoints, caches upstream results, and always preserves manual address entry.
 
-Email notifications are best effort and never roll back a successfully saved request or Calendar action. New requests notify the administrator; approvals, denials, reschedules, cancellations, and requester change decisions notify the verified requester. Recipients are restricted to `@shiphero.com`. Delivery requires the Gmail API and a dedicated sender OAuth grant limited to `https://www.googleapis.com/auth/gmail.send`. Set `GOOGLE_EMAIL_CLIENT_ID`, `GOOGLE_EMAIL_CLIENT_SECRET`, and `GOOGLE_EMAIL_REFRESH_TOKEN` in each deployment environment. The administrator connection check verifies the sender account without sending a message.
+Email notifications are best effort and never roll back a successfully saved request or Calendar action. New requests notify every active administrator; approvals, denials, reschedules, cancellations, and requester change decisions notify the verified requester. Recipients are restricted to `@shiphero.com`. Delivery requires the Gmail API and a dedicated sender OAuth grant using `https://www.googleapis.com/auth/gmail.send`, plus the standard `openid email` identity scopes so the connection check can confirm the exact sender without reading mailbox content or sending a test message. Set `GOOGLE_EMAIL_CLIENT_ID`, `GOOGLE_EMAIL_CLIENT_SECRET`, `GOOGLE_EMAIL_REFRESH_TOKEN`, and `GOOGLE_EMAIL_SENDER` in each deployment environment.
 
 ### Gmail sender setup
 
 1. Enable the Gmail API in the Google Cloud project used by Central Ops Travel.
-2. Use a dedicated Desktop OAuth client, or the existing approved Desktop client, to authorize the sender with only `https://www.googleapis.com/auth/gmail.send` and offline access.
-3. Store the client ID, client secret, and resulting refresh token as the three `GOOGLE_EMAIL_*` secrets. Never paste those values into chat or source control.
+2. Use a dedicated Desktop OAuth client, or the existing approved Desktop client, to authorize the sender with `https://www.googleapis.com/auth/gmail.send`, `openid`, and `email`, plus offline access. The identity scopes only verify the sender account.
+3. Store the client ID, client secret, resulting refresh token, and expected sender email as the four `GOOGLE_EMAIL_*` secrets. Never paste credential values into chat or source control.
 4. Redeploy the application, open `/admin`, and run **Check connections**. A valid setup reports the verified `@shiphero.com` sender without sending a test email.
 
 Required runtime configuration:
@@ -50,14 +50,14 @@ Required runtime configuration:
 - `GOOGLE_SHEETS_SPREADSHEET_ID` for the private app-created request Sheet
 - `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, and `GOOGLE_CALENDAR_REFRESH_TOKEN` for server-side Calendar event read/write
 - `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` for verified employee and administrator sign-in
-- `GOOGLE_EMAIL_CLIENT_ID`, `GOOGLE_EMAIL_CLIENT_SECRET`, and `GOOGLE_EMAIL_REFRESH_TOKEN` for approved Gmail notifications
+- `GOOGLE_EMAIL_CLIENT_ID`, `GOOGLE_EMAIL_CLIENT_SECRET`, `GOOGLE_EMAIL_REFRESH_TOKEN`, and `GOOGLE_EMAIL_SENDER` for approved Gmail notifications
 - optional `ADMIN_NOTIFICATION_EMAIL`, defaulting to `mike.azimi@shiphero.com`
 
 All credentials remain server-side. The application fails closed when any required connection is absent and never returns a mock write success.
 
 ### Google Sheets storage limits
 
-This store is intentionally sized for a low-volume, single-administrator workflow. Stable submission IDs plus payload fingerprints make sequential retries idempotent, and deterministic Calendar identifiers make external-write retries recoverable. Google Sheets does not provide transactions, uniqueness constraints, or atomic compare-and-set operations. Two requests or approvals executing at exactly the same time can therefore race, and the request-row update and audit-row append are not atomic. Keep Mike as the sole administrator while this backend is in use. Move the workflow to a transactional database if concurrent administrators or higher volume become necessary.
+This store is intentionally sized for a low-volume workflow. Stable submission IDs plus payload fingerprints make sequential retries idempotent, and deterministic Calendar identifiers make external-write retries recoverable. Google Sheets does not provide transactions, uniqueness constraints, or atomic compare-and-set operations. Two requests or approvals executing at exactly the same time can therefore race, and the request-row update and audit-row append are not atomic. The app supports multiple administrators, but they should avoid approving the same request at the same moment. Move the workflow to a transactional database if concurrent activity or volume grows.
 
 ## Local development
 
@@ -84,4 +84,4 @@ docker run --rm -p 3000:3000 --env-file .env.local central-ops-travel-hub
 
 Railway automatically detects the root `Dockerfile`. Configure `/api/health` as the service healthcheck path. Copy the existing server-side Google Calendar, Google Sheets, Google OIDC, and optional email variables into the Railway service. Set `APP_ORIGIN` to the final HTTPS origin and add `${APP_ORIGIN}/api/auth/google/callback` to the Google web OAuth client's authorized redirect URIs before using sign-in. `NEXT_PUBLIC_SIGN_IN_ORIGIN` is an optional Docker build argument; leave it empty to use same-origin sign-in on Railway.
 
-Do not add a public Railway domain until the intended access boundary is confirmed. Railway private networking isolates services inside a Railway environment, but it does not by itself give employee browsers access. A company VPN path requires a separately approved ingress design, such as a Tailscale forwarder, or a public domain restricted to the company's VPN egress addresses with Railway edge rules
+Do not add a public Railway domain until the intended access boundary is confirmed. Railway private networking isolates services inside a Railway environment, but it does not by itself give employee browsers access. A company VPN path requires a separately approved ingress design, such as a Tailscale forwarder, or a public domain restricted to the company's VPN egress addresses with Railway edge rules.

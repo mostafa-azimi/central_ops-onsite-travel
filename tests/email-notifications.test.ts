@@ -10,6 +10,7 @@ test("Gmail notifications use a narrow token exchange and ShipHero recipients", 
   process.env.GOOGLE_EMAIL_CLIENT_ID = "email-client";
   process.env.GOOGLE_EMAIL_CLIENT_SECRET = "email-secret";
   process.env.GOOGLE_EMAIL_REFRESH_TOKEN = "email-refresh";
+  process.env.GOOGLE_EMAIL_SENDER = "mike.azimi@shiphero.com";
   clearEmailTokenCacheForTests();
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -46,12 +47,12 @@ test("Gmail sender verification confirms a ShipHero account without sending emai
     const url = String(input);
     calls.push({ url, init });
     if (url.includes("oauth2.googleapis.com")) return Response.json({ access_token: "access", expires_in: 3600 });
-    return Response.json({ emailAddress: "mike.azimi@shiphero.com" });
+    return Response.json({ email: "mike.azimi@shiphero.com", email_verified: true, hd: "shiphero.com" });
   }) as typeof fetch;
 
   assert.equal(await verifyEmailNotificationConnection(fakeFetch), "mike.azimi@shiphero.com");
   assert.equal(calls.length, 2);
-  assert.match(calls[1].url, /gmail\/v1\/users\/me\/profile/);
+  assert.match(calls[1].url, /openidconnect\.googleapis\.com\/v1\/userinfo/);
   assert.equal(calls[1].init?.method, "GET");
 });
 

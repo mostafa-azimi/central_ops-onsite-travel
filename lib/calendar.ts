@@ -1,6 +1,6 @@
 import * as ical from "node-ical";
 import snapshot from "@/data/snapshot.json";
-import { ASSIGNEES, TRAVELER_EMAILS, type Assignee, type TravelEvent, type TravelFeed } from "@/lib/types";
+import { DEFAULT_PEOPLE, type Assignee, type TravelEvent, type TravelFeed, type TravelerProfile } from "@/lib/types";
 
 export const CALENDAR_ID =
   "c_8c7ba0dba70e52cecccbcaf595c59c55462074d031f50eecca5138a8303bc6f2@group.calendar.google.com";
@@ -21,15 +21,17 @@ function normalizedEmail(value: unknown) {
     .toLocaleLowerCase("en-US");
 }
 
-export function allowedAssignee(summary: string, identityEmails: Iterable<string>): Assignee | null {
+const DEFAULT_TRAVELERS: TravelerProfile[] = DEFAULT_PEOPLE.filter((person) => person.isTraveler).map(({ email, name, color }) => ({ email, name, color }));
+
+export function allowedAssignee(summary: string, identityEmails: Iterable<string>, travelers: TravelerProfile[] = DEFAULT_TRAVELERS): Assignee | null {
   const value = canonical(summary);
   const normalized = ` ${value} `;
-  const fullName = ASSIGNEES.find((name) => normalized.includes(` ${canonical(name)} `));
+  const fullName = travelers.find((person) => normalized.includes(` ${canonical(person.name)} `));
   const firstToken = value.split(" ")[0];
-  const candidate = fullName ?? ASSIGNEES.find((name) => canonical(name).split(" ")[0] === firstToken);
+  const candidate = fullName ?? travelers.find((person) => canonical(person.name).split(" ")[0] === firstToken);
   if (!candidate) return null;
   const emails = new Set([...identityEmails].map(normalizedEmail));
-  return emails.has(TRAVELER_EMAILS[candidate].toLowerCase()) ? candidate : null;
+  return emails.has(candidate.email.toLowerCase()) ? candidate.name : null;
 }
 
 function attendeeEmails(event: CalendarEvent) {

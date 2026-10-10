@@ -118,7 +118,7 @@ export function inclusiveEndToExclusive(value: string) {
   return end.toISOString().slice(0, 10);
 }
 
-export function validateVisitSubmission(input: unknown) {
+export function validateVisitSubmission(input: unknown, allowedTravelers: readonly string[] = ASSIGNEES) {
   if (!input || typeof input !== "object") return { ok: false as const, message: "Invalid request body." };
   const value = input as Record<string, unknown>;
   const submissionId = String(value.submissionId ?? "");
@@ -158,7 +158,7 @@ export function validateVisitSubmission(input: unknown) {
 
   if (!/^[0-9a-f-]{20,64}$/i.test(submissionId)) return { ok: false as const, message: "Invalid submission ID." };
   if (!TRIP_TYPES.includes(tripType as TripType)) return { ok: false as const, message: "Select a valid visit type." };
-  if (!ASSIGNEES.includes(traveler as Assignee)) return { ok: false as const, message: "Select an approved traveler." };
+  if (!allowedTravelers.includes(traveler)) return { ok: false as const, message: "Select an approved traveler." };
   if (!DATE_CONFIDENCE_LEVELS.includes(dateConfidence as DateConfidence)) {
     return { ok: false as const, message: "Select low, medium, or high date confidence." };
   }

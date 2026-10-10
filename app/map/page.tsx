@@ -4,6 +4,7 @@ import { fetchEmployeeTravelEvents, googleCalendarConfigured } from "@/lib/googl
 import { TravelMap } from "@/components/travel-map";
 import { isAllowedAdminEmail } from "@/lib/admin-policy";
 import { googleSignInHref } from "@/lib/auth-links";
+import { listActiveTravelers } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -31,5 +32,6 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
         return [];
       })
     : [];
-  return <TravelMap employee={employee} initialEvents={events} canAdminister={isAllowedAdminEmail(employee.email)} initialError={calendarError} />;
+  const [canAdminister, travelers] = await Promise.all([isAllowedAdminEmail(employee.email), listActiveTravelers()]);
+  return <TravelMap employee={employee} initialEvents={events} canAdminister={canAdminister} travelers={travelers} initialError={calendarError} />;
 }

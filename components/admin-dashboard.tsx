@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { ASSIGNEES } from "@/lib/types";
+import type { TravelerProfile } from "@/lib/types";
 import type { StoredVisitRequest } from "@/lib/db";
 import { AddressFields } from "@/components/address-fields";
 import { READINESS_ITEMS, readinessScore } from "@/lib/submissions";
@@ -27,7 +27,7 @@ function ReadinessReview({ request }: { request: StoredVisitRequest }) {
   );
 }
 
-export function AdminDashboard({ initialRequests }: { initialRequests: StoredVisitRequest[] }) {
+export function AdminDashboard({ initialRequests, travelers }: { initialRequests: StoredVisitRequest[]; travelers: TravelerProfile[] }) {
   const [requests, setRequests] = useState(initialRequests);
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"working" | "success" | "error">("working");
@@ -163,7 +163,7 @@ export function AdminDashboard({ initialRequests }: { initialRequests: StoredVis
               {!request.accountName && <input aria-label={`Account name for ${request.id}`} id={`account-${request.id}`} maxLength={120} placeholder="Account name" />}
               <select aria-label={`Traveler for ${request.id}`} value={selectedTraveler} onChange={(event) => setTravelerSelections((current) => ({ ...current, [request.id]: event.target.value }))} disabled={workingId === request.id}>
                 <option value="" disabled>Assign traveler</option>
-                {ASSIGNEES.map((name) => <option key={name}>{name}</option>)}
+                {travelers.map((person) => <option key={person.email} value={person.name}>{person.name}</option>)}
               </select>
               {conflicts.length > 0 && <span className="field-error" role="alert">Conflict: {selectedTraveler} already has {conflicts.length} overlapping {conflicts.length === 1 ? "visit" : "visits"}.</span>}
               <button className="btn-primary" type="button" onClick={() => {

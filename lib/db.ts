@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { normalizeAccountName, type ReadinessAnswers, type VisitRequestSubmission } from "@/lib/submissions";
-import { TRAVELER_EMAILS, type Assignee } from "@/lib/types";
+import { DEFAULT_PEOPLE, TRAVELER_EMAILS, type Assignee, type ManagedPerson, type TravelerProfile } from "@/lib/types";
 
 const SHEETS_API = "https://sheets.googleapis.com/v4";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REQUESTS_TAB = "Requests";
 const AUDIT_TAB = "Audit";
+const PEOPLE_TAB = "People";
 const REQUEST_COLUMN_COUNT = 50;
 const REQUEST_RANGE_END = "AX";
 type Fetch = typeof fetch;
@@ -27,6 +28,13 @@ export const REQUEST_HEADERS = [
 export const AUDIT_HEADERS = [
   "audit_id", "request_id", "created_at", "actor_email", "action", "details_json",
 ] as const;
+
+export const PEOPLE_HEADERS = [
+  "email", "display_name", "is_traveler", "is_admin", "map_color", "active",
+  "created_at", "updated_at", "updated_by_email",
+] as const;
+
+const PEOPLE_COLORS = ["#3281fd", "#9f1d20", "#d89116", "#32b76c", "#8a5cf6", "#008c95", "#ef5252", "#6b7280"] as const;
 
 export type StoredVisitRequest = Omit<VisitRequestSubmission, "readiness"> & {
   readiness: ReadinessAnswers | null;
@@ -63,7 +71,9 @@ type RequestRow = {
 };
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
+let cachedPeople: { value: ManagedPerson[]; expiresAt: number } | null = null;
 let schemaEnsured = false;
+let peopleSchemaEnsured = false;
 
 export function databaseConfigured() {
   return Boolean(
@@ -290,7 +300,8 @@ async function readRows(fetchImpl: Fetch = fetch) {
 }
 
 async function appendValues(tab: string, values: string[], fetchImpl: Fetch) {
-  const range = encodeURIComponent(`${tab}!A:${tab === REQUESTS_TAB ? REQUEST_RANGE_END : "F"}`);
+  const rangeEnd = tab === REQUESTS_TAB ? REQUEST_RANGE_END : tab === PEOPLE_TAB ? "I" : "F";
+  const range = encodeURIComponent(`${tab}!A:${rangeEnd}`);
   await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ majorDimension: "ROWS", values: [values] }) },
@@ -325,6 +336,175 @@ async function appendAudit(requestId: string, actorEmail: string, action: string
   ], fetchImpl);
 }
 
+function booleanCell(value: string) {
+  return value.trim().toLowerCase() === "true";
+}
+
+function personFromValues(values: string[]): ManagedPerson | null {
+  const email = cell(values, 0).trim().toLowerCase();
+  if (!email) return null;
+  return {
+    email,
+    name: cell(values, 1).trim(),
+    isTraveler: booleanCell(cell(values, 2)),
+    isAdmin: booleanCell(cell(values, 3)),
+    color: cell(values, 4).trim().toLowerCase() || "#3281fd",
+    active: booleanCell(cell(values, 5)),
+    createdAt: cell(values, 6),
+    updatedAt: cell(values, 7),
+    updatedByEmail: cell(values, 8).trim().toLowerCase(),
+  };
+}
+
+function personValues(person: ManagedPerson) {
+  return [
+    person.email, person.name, String(person.isTraveler), String(person.isAdmin), person.color,
+    String(person.active), person.createdAt, person.updatedAt, person.updatedByEmail,
+  ];
+}
+
+async function readPeopleRows(fetchImpl: Fetch = fetch) {
+  const range = encodeURIComponent(`${PEOPLE_TAB}!A2:I1001`);
+  const response = await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}?majorDimension=ROWS`,
+    { method: "GET" },
+    fetchImpl,
+  );
+  const body = (await response.json()) as { values?: string[][] };
+  return (body.values ?? [])
+    .map((values, index) => ({ rowNumber: index + 2, values, person: personFromValues(values) }))
+    .filter((row): row is { rowNumber: number; values: string[]; person: ManagedPerson } => Boolean(row.person));
+}
+
+async function ensurePeopleSchema(fetchImpl: Fetch = fetch) {
+  if (peopleSchemaEnsured) return;
+  const metadata = await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}?fields=sheets.properties.title`,
+    { method: "GET" },
+    fetchImpl,
+  );
+  const body = (await metadata.json()) as { sheets?: Array<{ properties?: { title?: string } }> };
+  const exists = body.sheets?.some((sheet) => sheet.properties?.title === PEOPLE_TAB) ?? false;
+  if (!exists) {
+    await sheetsFetch(
+      `/spreadsheets/${encodeURIComponent(spreadsheetId())}:batchUpdate`,
+      { method: "POST", body: JSON.stringify({ requests: [{ addSheet: { properties: { title: PEOPLE_TAB, gridProperties: { frozenRowCount: 1, columnCount: PEOPLE_HEADERS.length } } } }] }) },
+      fetchImpl,
+    );
+  }
+  const headerRange = `${PEOPLE_TAB}!A1:I1`;
+  await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(headerRange)}?valueInputOption=RAW`,
+    { method: "PUT", body: JSON.stringify({ range: headerRange, majorDimension: "ROWS", values: [[...PEOPLE_HEADERS]] }) },
+    fetchImpl,
+  );
+  const rows = await readPeopleRows(fetchImpl);
+  if (rows.length === 0) {
+    const now = new Date().toISOString();
+    for (const person of DEFAULT_PEOPLE) {
+      await appendValues(PEOPLE_TAB, personValues({ ...person, createdAt: now, updatedAt: now, updatedByEmail: "system" }), fetchImpl);
+    }
+  }
+  peopleSchemaEnsured = true;
+}
+
+export async function listPeopleDirectory(fetchImpl: Fetch = fetch) {
+  if (!databaseConfigured()) return DEFAULT_PEOPLE;
+  if (fetchImpl === fetch && cachedPeople && cachedPeople.expiresAt > Date.now()) return cachedPeople.value;
+  await ensurePeopleSchema(fetchImpl);
+  const people = (await readPeopleRows(fetchImpl)).map((row) => row.person).sort((a, b) => a.name.localeCompare(b.name));
+  if (fetchImpl === fetch) cachedPeople = { value: people, expiresAt: Date.now() + 60_000 };
+  return people;
+}
+
+export async function listActiveTravelers(fetchImpl: Fetch = fetch): Promise<TravelerProfile[]> {
+  return (await listPeopleDirectory(fetchImpl))
+    .filter((person) => person.active && person.isTraveler)
+    .map(({ email, name, color }) => ({ email, name, color }));
+}
+
+export async function listKnownTravelers(fetchImpl: Fetch = fetch): Promise<TravelerProfile[]> {
+  return (await listPeopleDirectory(fetchImpl))
+    .filter((person) => person.isTraveler)
+    .map(({ email, name, color }) => ({ email, name, color }));
+}
+
+export async function listActiveAdminEmails(fetchImpl: Fetch = fetch) {
+  return (await listPeopleDirectory(fetchImpl)).filter((person) => person.active && person.isAdmin).map((person) => person.email);
+}
+
+export async function findActiveTravelerByName(name: string, fetchImpl: Fetch = fetch) {
+  const normalized = name.trim().toLocaleLowerCase("en-US");
+  return (await listActiveTravelers(fetchImpl)).find((person) => person.name.toLocaleLowerCase("en-US") === normalized) ?? null;
+}
+
+export function validateManagedPerson(input: Partial<ManagedPerson>) {
+  const email = String(input.email ?? "").trim().toLowerCase();
+  const name = String(input.name ?? "").trim().replace(/\s+/g, " ");
+  const color = String(input.color ?? "").trim().toLowerCase();
+  if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@shiphero\.com$/i.test(email)) throw new Error("SHIPHERO_EMAIL_REQUIRED");
+  if (name.length < 2 || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error("VALID_DISPLAY_NAME_REQUIRED");
+  if (!input.isTraveler && !input.isAdmin) throw new Error("PERSON_ROLE_REQUIRED");
+  if (!PEOPLE_COLORS.includes(color as (typeof PEOPLE_COLORS)[number])) throw new Error("INVALID_PERSON_COLOR");
+  return { email, name, color, isTraveler: Boolean(input.isTraveler), isAdmin: Boolean(input.isAdmin), active: input.active !== false };
+}
+
+export function assertAdministratorContinuity(existing: ManagedPerson | null, nextIsActiveAdmin: boolean, activeAdminCount: number) {
+  if (existing?.active && existing.isAdmin && !nextIsActiveAdmin && activeAdminCount <= 1) {
+    throw new Error("LAST_ADMIN_REQUIRED");
+  }
+}
+
+export async function saveManagedPerson(input: Partial<ManagedPerson>, actorEmail: string, fetchImpl: Fetch = fetch) {
+  await ensurePeopleSchema(fetchImpl);
+  const valid = validateManagedPerson(input);
+  const rows = await readPeopleRows(fetchImpl);
+  const existing = rows.find((row) => row.person.email === valid.email);
+  const activeAdmins = rows.filter((row) => row.person.active && row.person.isAdmin);
+  assertAdministratorContinuity(existing?.person ?? null, valid.active && valid.isAdmin, activeAdmins.length);
+  const now = new Date().toISOString();
+  const person: ManagedPerson = {
+    ...valid,
+    createdAt: existing?.person.createdAt || now,
+    updatedAt: now,
+    updatedByEmail: actorEmail.trim().toLowerCase(),
+  };
+  if (existing) {
+    const rangeName = `${PEOPLE_TAB}!A${existing.rowNumber}:I${existing.rowNumber}`;
+    await sheetsFetch(
+      `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(rangeName)}?valueInputOption=RAW`,
+      { method: "PUT", body: JSON.stringify({ range: rangeName, majorDimension: "ROWS", values: [personValues(person)] }) },
+      fetchImpl,
+    );
+  } else {
+    await appendValues(PEOPLE_TAB, personValues(person), fetchImpl);
+  }
+  await appendAudit("people", actorEmail, existing ? "person_updated" : "person_created", { email: person.email, name: person.name, isTraveler: person.isTraveler, isAdmin: person.isAdmin, active: person.active }, fetchImpl);
+  cachedPeople = null;
+  return person;
+}
+
+export async function deactivateManagedPerson(email: string, actorEmail: string, fetchImpl: Fetch = fetch) {
+  await ensurePeopleSchema(fetchImpl);
+  const normalized = email.trim().toLowerCase();
+  const rows = await readPeopleRows(fetchImpl);
+  const existing = rows.find((row) => row.person.email === normalized);
+  if (!existing?.person.active) return null;
+  const activeAdmins = rows.filter((row) => row.person.active && row.person.isAdmin);
+  assertAdministratorContinuity(existing.person, false, activeAdmins.length);
+  const now = new Date().toISOString();
+  const person = { ...existing.person, active: false, updatedAt: now, updatedByEmail: actorEmail.trim().toLowerCase() };
+  const rangeName = `${PEOPLE_TAB}!A${existing.rowNumber}:I${existing.rowNumber}`;
+  await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(rangeName)}?valueInputOption=RAW`,
+    { method: "PUT", body: JSON.stringify({ range: rangeName, majorDimension: "ROWS", values: [personValues(person)] }) },
+    fetchImpl,
+  );
+  await appendAudit("people", actorEmail, "person_deactivated", { email: normalized }, fetchImpl);
+  cachedPeople = null;
+  return person;
+}
+
 export async function createVisitRequest(input: VisitRequestSubmission, fetchImpl: Fetch = fetch) {
   await ensureRequestSchema(fetchImpl);
   const existing = await findCanonicalRow(input.submissionId, fetchImpl);
@@ -355,12 +535,14 @@ export async function listVisitRequests(fetchImpl: Fetch = fetch) {
 export async function listEmployeeVisitRequests(employeeEmail: string, fetchImpl: Fetch = fetch) {
   await ensureRequestSchema(fetchImpl);
   const normalized = employeeEmail.trim().toLowerCase();
+  const travelers = await listKnownTravelers(fetchImpl);
   return canonicalRows(await readRows(fetchImpl))
     .map((row) => row.request)
     .filter((request) => {
       if (request.requesterEmail === normalized) return true;
       const travelerEmail = request.assignedTraveler
-        ? TRAVELER_EMAILS[request.assignedTraveler as Assignee]?.toLowerCase()
+        ? travelers.find((person) => person.name === request.assignedTraveler)?.email.toLowerCase()
+          ?? TRAVELER_EMAILS[request.assignedTraveler as Assignee]?.toLowerCase()
         : null;
       return Boolean(request.pendingChange && travelerEmail === normalized);
     })
@@ -615,6 +797,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
       sheets: [
         { properties: { title: REQUESTS_TAB, gridProperties: { frozenRowCount: 1, columnCount: REQUEST_COLUMN_COUNT } } },
         { properties: { title: AUDIT_TAB, gridProperties: { frozenRowCount: 1 } } },
+        { properties: { title: PEOPLE_TAB, gridProperties: { frozenRowCount: 1, columnCount: PEOPLE_HEADERS.length } } },
       ],
     }),
     cache: "no-store",
@@ -632,6 +815,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
         data: [
           { range: `${REQUESTS_TAB}!A1:${REQUEST_RANGE_END}1`, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] },
           { range: `${AUDIT_TAB}!A1:F1`, majorDimension: "ROWS", values: [[...AUDIT_HEADERS]] },
+          { range: `${PEOPLE_TAB}!A1:I1`, majorDimension: "ROWS", values: [[...PEOPLE_HEADERS]] },
         ],
       }),
     },
@@ -642,5 +826,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
 
 export function clearGoogleSheetsTokenCacheForTests() {
   cachedToken = null;
+  cachedPeople = null;
   schemaEnsured = false;
+  peopleSchemaEnsured = false;
 }

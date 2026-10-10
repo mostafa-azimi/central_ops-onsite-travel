@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { allowedAssignee, CALENDAR_ID, CALENDAR_TIME_ZONE, publicFields } from "@/lib/calendar";
 import { addressWithPostalCode, inclusiveEndToExclusive, readinessScore, type ReadinessAnswers, type TripType } from "@/lib/submissions";
-import { TRAVELER_EMAILS, type Assignee, type EmployeeTravelEvent, type TravelEvent } from "@/lib/types";
+import { DEFAULT_PEOPLE, type Assignee, type EmployeeTravelEvent, type TravelEvent, type TravelerProfile } from "@/lib/types";
+import { listKnownTravelers } from "@/lib/db";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
@@ -23,6 +24,7 @@ type GoogleEvent = {
 type CalendarWriteInput = {
   requestId: string;
   traveler: Assignee;
+  travelerEmail: string;
   tripType: TripType;
   companyName: string;
   cashUrl: string;
@@ -65,8 +67,9 @@ function employeeName(attendee: { email?: string; displayName?: string }) {
 export function additionalParticipantNames(
   assignee: Assignee,
   attendees: Array<{ email?: string; displayName?: string; responseStatus?: string }>,
+  travelers: TravelerProfile[] = DEFAULT_PEOPLE.filter((person) => person.isTraveler).map(({ email, name, color }) => ({ email, name, color })),
 ) {
-  const primaryEmail = TRAVELER_EMAILS[assignee].toLowerCase();
+  const primaryEmail = travelers.find((person) => person.name === assignee)?.email.toLowerCase() ?? "";
   const seenEmails = new Set<string>();
   const seenNames = new Set<string>();
   const names: string[] = [];
@@ -86,8 +89,9 @@ export function additionalParticipantNames(
 function calendarParticipantNames(
   assignee: Assignee,
   attendees: Array<{ email?: string; displayName?: string; responseStatus?: string }>,
+  travelers?: TravelerProfile[],
 ) {
-  return [assignee, ...additionalParticipantNames(assignee, attendees)];
+  return [assignee, ...additionalParticipantNames(assignee, attendees, travelers)];
 }
 
 function finiteCoordinate(value: string | undefined, min: number, max: number) {
@@ -152,7 +156,7 @@ function publicId(event: GoogleEvent, start: string) {
   return createHash("sha256").update(`${event.id ?? "event"}:${start}`).digest("hex").slice(0, 20);
 }
 
-export function googleEventToPublic(event: GoogleEvent): TravelEvent | null {
+export function googleEventToPublic(event: GoogleEvent, travelers?: TravelerProfile[]): TravelEvent | null {
   if (event.status === "cancelled" || !event.start || !event.end) return null;
   const summary = String(event.summary ?? "");
   const assignee = allowedAssignee(
@@ -160,6 +164,7 @@ export function googleEventToPublic(event: GoogleEvent): TravelEvent | null {
     (event.attendees ?? [])
       .filter((attendee) => attendee.responseStatus !== "declined")
       .map((attendee) => attendee.email ?? ""),
+    travelers,
   );
   if (!assignee) return null;
   const start = event.start.date ?? event.start.dateTime;
@@ -181,6 +186,7 @@ export async function fetchGoogleTravelEvents(
   fetchImpl: Fetch = fetch,
 ): Promise<TravelEvent[]> {
   const token = await getGoogleAccessToken(fetchImpl);
+  const travelers = await listKnownTravelers(fetchImpl);
   const through = new Date(now.getTime() + 366 * 24 * 60 * 60 * 1000);
   const events: TravelEvent[] = [];
   let pageToken = "";
@@ -203,7 +209,7 @@ export async function fetchGoogleTravelEvents(
     if (!response.ok) throw new Error(`Google Calendar read failed: ${await responseMessage(response)}`);
     const body = (await response.json()) as { items?: GoogleEvent[]; nextPageToken?: string };
     for (const event of body.items ?? []) {
-      const item = googleEventToPublic(event);
+      const item = googleEventToPublic(event, travelers);
       if (item) events.push(item);
     }
     pageToken = body.nextPageToken ?? "";
@@ -218,6 +224,7 @@ export async function fetchEmployeeTravelEvents(
   fetchImpl: Fetch = fetch,
 ): Promise<EmployeeTravelEvent[]> {
   const token = await getGoogleAccessToken(fetchImpl);
+  const travelers = await listKnownTravelers(fetchImpl);
   const through = new Date(now.getTime() + 366 * 24 * 60 * 60 * 1000);
   const query = new URLSearchParams({
     singleEvents: "true",
@@ -235,13 +242,13 @@ export async function fetchEmployeeTravelEvents(
   if (!response.ok) throw new Error(`Google Calendar read failed: ${await responseMessage(response)}`);
   const body = (await response.json()) as { items?: GoogleEvent[] };
   return (body.items ?? []).flatMap((event) => {
-    const publicEvent = googleEventToPublic(event);
+    const publicEvent = googleEventToPublic(event, travelers);
     if (!publicEvent || !event.id) return [];
     const privateProperties = event.extendedProperties?.private ?? {};
     return [{
       ...publicEvent,
       calendarEventId: event.id,
-      participants: additionalParticipantNames(publicEvent.assignee, event.attendees ?? []),
+      participants: additionalParticipantNames(publicEvent.assignee, event.attendees ?? [], travelers),
       joined: (event.attendees ?? []).some((attendee) => attendee.email?.toLowerCase() === employeeEmail.toLowerCase()),
       countryCode: /^[A-Z]{2}$/i.test(privateProperties.countryCode ?? "") ? String(privateProperties.countryCode).toUpperCase() : "US",
       latitude: finiteCoordinate(privateProperties.latitude, -90, 90),
@@ -257,14 +264,16 @@ async function getManagedCalendarEvent(eventId: string, fetchImpl: Fetch) {
   const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
   if (!response.ok) throw new Error(`Calendar event lookup failed: ${await responseMessage(response)}`);
   const event = (await response.json()) as GoogleEvent;
+  const travelers = await listKnownTravelers(fetchImpl);
   const assignee = allowedAssignee(
     String(event.summary ?? ""),
     (event.attendees ?? [])
       .filter((attendee) => attendee.responseStatus !== "declined")
       .map((attendee) => attendee.email ?? ""),
+    travelers,
   );
   if (!assignee || event.status === "cancelled") throw new Error("EVENT_NOT_AVAILABLE");
-  return { token, url, event, assignee };
+  return { token, url, event, assignee, travelers };
 }
 
 export async function updateCalendarAttendance(
@@ -275,15 +284,15 @@ export async function updateCalendarAttendance(
 ) {
   const normalizedEmail = employeeEmail.trim().toLowerCase();
   if (!normalizedEmail.endsWith("@shiphero.com")) throw new Error("EMPLOYEE_EMAIL_REQUIRED");
-  const { token, url, event, assignee } = await getManagedCalendarEvent(eventId, fetchImpl);
-  const primaryEmail = TRAVELER_EMAILS[assignee].toLowerCase();
+  const { token, url, event, assignee, travelers } = await getManagedCalendarEvent(eventId, fetchImpl);
+  const primaryEmail = travelers.find((person) => person.name === assignee)?.email.toLowerCase() ?? "";
   if (action === "leave" && normalizedEmail === primaryEmail) throw new Error("PRIMARY_TRAVELER_CANNOT_LEAVE");
   const current = event.attendees ?? [];
   const isAttending = current.some((attendee) => attendee.email?.toLowerCase() === normalizedEmail);
   if ((action === "join" && isAttending) || (action === "leave" && !isAttending)) {
     return {
       requestId: event.extendedProperties?.private?.centralOpsRequestId ?? null,
-      participants: calendarParticipantNames(assignee, current),
+      participants: calendarParticipantNames(assignee, current, travelers),
     };
   }
   const attendees = action === "join"
@@ -298,7 +307,7 @@ export async function updateCalendarAttendance(
   if (!response.ok) throw new Error(`Calendar attendee update failed: ${await responseMessage(response)}`);
   return {
     requestId: event.extendedProperties?.private?.centralOpsRequestId ?? null,
-    participants: calendarParticipantNames(assignee, attendees),
+    participants: calendarParticipantNames(assignee, attendees, travelers),
   };
 }
 
@@ -359,7 +368,9 @@ export async function createOrGetCalendarEvent(
 ): Promise<CalendarWriteResult> {
   const token = await getGoogleAccessToken(fetchImpl);
   const eventId = deterministicEventId(input.requestId);
-  const travelerEmail = TRAVELER_EMAILS[input.traveler];
+  const travelerEmail = input.travelerEmail
+    || DEFAULT_PEOPLE.find((person) => person.name === input.traveler)?.email;
+  if (!travelerEmail) throw new Error("ACTIVE_TRAVELER_REQUIRED");
   const payload = {
     id: eventId,
     summary: `${input.traveler}: ${input.companyName}`,

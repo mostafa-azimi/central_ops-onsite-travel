@@ -5,7 +5,7 @@ export const ASSIGNEES = [
   "Sam Armenia",
 ] as const;
 
-export type Assignee = (typeof ASSIGNEES)[number];
+export type Assignee = string;
 
 export const TRAVELER_EMAILS: Record<Assignee, string> = {
   "Chris Haun": "chris.haun@shiphero.com",
@@ -13,6 +13,39 @@ export const TRAVELER_EMAILS: Record<Assignee, string> = {
   "Rob McFaul": "rob.mcfaul@shiphero.com",
   "Sam Armenia": "samuel.armenia@shiphero.com",
 };
+
+export const DEFAULT_TRAVELER_COLORS: Record<string, string> = {
+  "Chris Haun": "#3281fd",
+  "Mike Azimi": "#9f1d20",
+  "Rob McFaul": "#d89116",
+  "Sam Armenia": "#32b76c",
+};
+
+export type ManagedPerson = {
+  email: string;
+  name: string;
+  isTraveler: boolean;
+  isAdmin: boolean;
+  color: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  updatedByEmail: string;
+};
+
+export type TravelerProfile = Pick<ManagedPerson, "email" | "name" | "color">;
+
+export const DEFAULT_PEOPLE: ManagedPerson[] = ASSIGNEES.map((name) => ({
+  email: TRAVELER_EMAILS[name],
+  name,
+  isTraveler: true,
+  isAdmin: name === "Mike Azimi",
+  color: DEFAULT_TRAVELER_COLORS[name],
+  active: true,
+  createdAt: "",
+  updatedAt: "",
+  updatedByEmail: "",
+}));
 
 export type TravelEvent = {
   id: string;

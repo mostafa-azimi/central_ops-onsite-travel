@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ASSIGNEES, TRAVELER_EMAILS, type Assignee, type TravelFeed } from "@/lib/types";
+import type { Assignee, TravelFeed, TravelerProfile } from "@/lib/types";
 import { AddressFields } from "@/components/address-fields";
 import { ReadinessFields } from "@/components/readiness-fields";
 import type { StoredVisitRequest } from "@/lib/db";
@@ -69,6 +69,7 @@ export function TravelDashboard({
   employee,
   initialRequests,
   canAdminister,
+  travelers,
   initialView,
 }: {
   feed: TravelFeed;
@@ -76,6 +77,7 @@ export function TravelDashboard({
   employee: { email: string; name: string } | null;
   initialRequests: StoredVisitRequest[];
   canAdminister: boolean;
+  travelers: TravelerProfile[];
   initialView: "schedule" | "submit";
 }) {
   const [view, setView] = useState<"schedule" | "submit">(initialView);
@@ -230,7 +232,7 @@ export function TravelDashboard({
           <Link href="/map">Map view</Link>
           <Link href="/calendar">Calendar view</Link>
           <Link href="/how-to-use">How to use</Link>
-          {canAdminister && <Link href="/admin">Approvals</Link>}
+          {canAdminister && <><Link href="/admin">Approvals</Link><Link href="/admin/settings">Admin settings</Link></>}
         </nav>
 
         {view === "schedule" ? (
@@ -243,7 +245,8 @@ export function TravelDashboard({
               <fieldset>
                 <legend>Filter by teammate</legend>
                 <div className="filters">
-                  {ASSIGNEES.map((assignee) => {
+                  {travelers.map((person) => {
+                    const assignee = person.name;
                     const active = selected.includes(assignee);
                     const count = feed.events.filter((event) => event.assignee === assignee).length;
                     return (
@@ -339,7 +342,7 @@ export function TravelDashboard({
                   {visibleRequests.map((request) => {
                     const isRequester = request.requesterEmail === employee.email;
                     const assignedEmail = request.assignedTraveler
-                      ? TRAVELER_EMAILS[request.assignedTraveler as Assignee]
+                      ? travelers.find((person) => person.name === request.assignedTraveler)?.email
                       : null;
                     const canDecide = canAdminister || assignedEmail === employee.email;
                     const activeVisit = Boolean(request.calendarEventId && !["cancelled", "denied"].includes(request.status));

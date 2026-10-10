@@ -1,0 +1,35 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { assertAdministratorContinuity, validateManagedPerson } from "@/lib/db";
+import type { ManagedPerson } from "@/lib/types";
+
+test("people directory requires an exact ShipHero email, full name, role, and approved color", () => {
+  const person = validateManagedPerson({
+    email: " New.Traveler@ShipHero.com ",
+    name: "New Traveler",
+    isTraveler: true,
+    isAdmin: false,
+    color: "#3281FD",
+  });
+  assert.equal(person.email, "new.traveler@shiphero.com");
+  assert.equal(person.color, "#3281fd");
+  assert.throws(() => validateManagedPerson({ ...person, email: "person@example.com" }), /SHIPHERO_EMAIL_REQUIRED/);
+  assert.throws(() => validateManagedPerson({ ...person, isTraveler: false, isAdmin: false }), /PERSON_ROLE_REQUIRED/);
+  assert.throws(() => validateManagedPerson({ ...person, color: "#ffffff" }), /INVALID_PERSON_COLOR/);
+});
+
+test("the final active administrator cannot be demoted or removed", () => {
+  const admin = {
+    email: "mike.azimi@shiphero.com",
+    name: "Mike Azimi",
+    isTraveler: true,
+    isAdmin: true,
+    color: "#9f1d20",
+    active: true,
+    createdAt: "",
+    updatedAt: "",
+    updatedByEmail: "",
+  } satisfies ManagedPerson;
+  assert.throws(() => assertAdministratorContinuity(admin, false, 1), /LAST_ADMIN_REQUIRED/);
+  assert.doesNotThrow(() => assertAdministratorContinuity(admin, false, 2));
+});

@@ -107,6 +107,24 @@ test("administrator can open approvals and run non-mutating connection checks", 
   await page.screenshot({ path: testInfo.outputPath("admin-health.png"), fullPage: true });
 });
 
+test("administrator can manage traveler and administrator access", async ({ page }) => {
+  await authenticate(page, "admin");
+  await page.route("**/api/admin/people", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const body = route.request().postDataJSON() as { email: string; name: string; isTraveler: boolean; isAdmin: boolean; color: string };
+    await route.fulfill({ status: 200, json: { person: { ...body, active: true, createdAt: "2026-10-10T00:00:00.000Z", updatedAt: "2026-10-10T00:00:00.000Z", updatedByEmail: "mike.azimi@shiphero.com" } } });
+  });
+  await page.goto("/admin/settings");
+  await expect(page.getByRole("heading", { name: "Admin settings" })).toBeVisible();
+  await page.getByLabel("Full name").fill("Amanda Example");
+  await page.getByLabel("ShipHero email").fill("amanda.example@shiphero.com");
+  await page.getByRole("checkbox", { name: /Administrator/ }).check();
+  await page.getByRole("button", { name: "Add person" }).click();
+  await expect(page.getByRole("heading", { name: "Amanda Example" })).toBeVisible();
+  await expect(page.getByText("amanda.example@shiphero.com")).toBeVisible();
+  await expectAccessible(page);
+});
+
 test("verified employee can open the map and traveler legend", async ({ page }) => {
   await authenticate(page, "employee");
   await page.goto("/map");

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { validateVisitSubmission } from "@/lib/submissions";
 import { getAdminSession } from "@/lib/admin-auth";
 import { ApprovalError, approvalConnectionError, approveVisitRequest } from "@/lib/approve-request";
-import { createVisitRequest, databaseConfigured } from "@/lib/db";
+import { createVisitRequest, databaseConfigured, listActiveTravelers } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Invalid JSON body." }, { status: 400 });
   }
 
-  const parsed = validateVisitSubmission(body);
+  const parsed = validateVisitSubmission(body, (await listActiveTravelers()).map((person) => person.name));
   if (!parsed.ok) {
     return NextResponse.json({ message: parsed.message }, { status: 400 });
   }

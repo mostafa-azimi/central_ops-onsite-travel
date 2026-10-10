@@ -1,10 +1,9 @@
 import { isAllowedAdminEmail } from "@/lib/admin-policy";
-import { TRAVELER_EMAILS, type Assignee } from "@/lib/types";
-import type { StoredVisitRequest } from "@/lib/db";
+import { findActiveTravelerByName, type StoredVisitRequest } from "@/lib/db";
 
-export function canApproveVisitChange(request: StoredVisitRequest, employeeEmail: string) {
+export async function canApproveVisitChange(request: StoredVisitRequest, employeeEmail: string) {
   const normalized = employeeEmail.trim().toLowerCase();
-  if (isAllowedAdminEmail(normalized)) return true;
+  if (await isAllowedAdminEmail(normalized)) return true;
   if (!request.assignedTraveler) return false;
-  return TRAVELER_EMAILS[request.assignedTraveler as Assignee]?.toLowerCase() === normalized;
+  return (await findActiveTravelerByName(request.assignedTraveler))?.email.toLowerCase() === normalized;
 }

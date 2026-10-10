@@ -50,7 +50,7 @@ export async function verifyEmployeeToken(token: string | undefined): Promise<Em
 
 export async function verifyAdminToken(token: string | undefined): Promise<AdminSession | null> {
   const employee = await verifyEmployeeToken(token);
-  return employee && isAllowedAdminEmail(employee.email) ? employee : null;
+  return employee && await isAllowedAdminEmail(employee.email) ? employee : null;
 }
 
 export async function getEmployeeSession() {
@@ -61,13 +61,12 @@ export async function getEmployeeSession() {
 export async function getAdminSession() {
   const store = await cookies();
   const testSession = e2eSession(store.get(E2E_AUTH_COOKIE)?.value);
-  return testSession && isAllowedAdminEmail(testSession.email)
-    ? testSession
-    : verifyAdminToken(store.get(ADMIN_COOKIE)?.value);
+  if (testSession) return await isAllowedAdminEmail(testSession.email) ? testSession : null;
+  return verifyAdminToken(store.get(ADMIN_COOKIE)?.value);
 }
 
 export function appOrigin(request: Request) {
   const requestOrigin = new URL(request.url).origin;
   if (requestOrigin.startsWith("http://localhost:")) return requestOrigin;
-  return (process.env.APP_ORIGIN ?? "https://cs-onsite-travel.vercel.app").replace(/\/$/, "");
+  return (process.env.APP_ORIGIN ?? "https://central-ops-travel-hub.vercel.app").replace(/\/$/, "");
 }

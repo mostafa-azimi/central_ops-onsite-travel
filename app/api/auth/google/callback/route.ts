@@ -5,7 +5,7 @@ import { ADMIN_COOKIE, appOrigin, verifyEmployeeToken } from "@/lib/admin-auth";
 export const runtime = "nodejs";
 
 function appRedirect(request: Request, path: string, error?: string) {
-  const safePath = ["/", "/?view=submit", "/map", "/admin"].includes(path) ? path : "/admin";
+  const safePath = ["/", "/?view=submit", "/map", "/calendar", "/admin", "/admin/settings"].includes(path) ? path : "/admin";
   const url = new URL(safePath, appOrigin(request));
   if (error) url.searchParams.set("error", error);
   return NextResponse.redirect(url);
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const expectedState = store.get("central_ops_oauth_state")?.value;
   const verifier = store.get("central_ops_oauth_verifier")?.value;
   const savedReturnTo = store.get("central_ops_oauth_return")?.value;
-  const returnTo = ["/", "/?view=submit", "/map", "/admin"].includes(savedReturnTo ?? "") ? savedReturnTo! : "/admin";
+  const returnTo = ["/", "/?view=submit", "/map", "/calendar", "/admin", "/admin/settings"].includes(savedReturnTo ?? "") ? savedReturnTo! : "/admin";
   const clientId = process.env.GOOGLE_OIDC_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OIDC_CLIENT_SECRET;
 

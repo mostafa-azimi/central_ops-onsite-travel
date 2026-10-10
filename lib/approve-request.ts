@@ -2,6 +2,7 @@ import {
   claimVisitRequestApproval,
   completeVisitRequestApproval,
   failVisitRequestApproval,
+  findActiveTravelerByName,
   getVisitRequest,
   saveCalendarResult,
   type StoredVisitRequest,
@@ -34,6 +35,8 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
   if (!current?.accountName) {
     throw new ApprovalError("Enter the account name before approving this request.", "conflict");
   }
+  const travelerProfile = await findActiveTravelerByName(traveler);
+  if (!travelerProfile) throw new ApprovalError("Select an active traveler.", "conflict");
 
   const claimed = await claimVisitRequestApproval(id, traveler);
   if (!claimed) {
@@ -46,6 +49,7 @@ export async function approveVisitRequest(id: string, traveler: Assignee, actorE
       const calendar = await createOrGetCalendarEvent({
         requestId: claimed.id,
         traveler,
+        travelerEmail: travelerProfile.email,
         tripType: claimed.tripType,
         companyName: claimed.accountName,
         cashUrl: claimed.cashUrl,

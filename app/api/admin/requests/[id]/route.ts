@@ -3,12 +3,12 @@ import { getAdminSession } from "@/lib/admin-auth";
 import {
   databaseConfigured,
   denyVisitRequest,
+  findActiveTravelerByName,
   getVisitRequest,
   recordVisitCancellation,
   recordVisitReschedule,
   setVisitRequestAccountName,
 } from "@/lib/db";
-import { ASSIGNEES } from "@/lib/types";
 import { ApprovalError, approveVisitRequest } from "@/lib/approve-request";
 import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/google-calendar";
 import { validateVisitSubmission } from "@/lib/submissions";
@@ -33,7 +33,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ request: denied });
   }
   if (body?.action === "approve") {
-    if (!ASSIGNEES.includes(body.traveler as (typeof ASSIGNEES)[number])) {
+    const traveler = await findActiveTravelerByName(String(body.traveler ?? ""));
+    if (!traveler) {
       return NextResponse.json({ message: "Select an approved traveler." }, { status: 400 });
     }
     try {
@@ -43,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
       const approved = await approveVisitRequest(
         id,
-        body.traveler as (typeof ASSIGNEES)[number],
+        traveler.name,
         admin.email,
       );
       await notifyRequestDecision(approved, "approved");
@@ -73,7 +74,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       tripType: current.tripType,
       accountName: current.accountName,
       cashUrl: current.cashUrl,
-    });
+    }, current.assignedTraveler ? [current.assignedTraveler] : []);
     if (!parsed.ok) return NextResponse.json({ message: parsed.message }, { status: 400 });
     await rescheduleCalendarEvent(current.calendarEventId, {
       start: parsed.value.start,

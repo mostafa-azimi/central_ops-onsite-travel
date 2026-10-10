@@ -5,6 +5,7 @@ import { fetchEmployeeTravelEvents, googleCalendarConfigured } from "@/lib/googl
 import { isAllowedAdminEmail } from "@/lib/admin-policy";
 import { TravelCalendar } from "@/components/travel-calendar";
 import type { EmployeeTravelEvent } from "@/lib/types";
+import { listActiveTravelers } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -49,12 +50,14 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         return [];
       })
     : [];
+  const [canAdminister, travelers] = await Promise.all([isAllowedAdminEmail(employee.email), listActiveTravelers()]);
 
   return (
     <TravelCalendar
       employee={employee}
       initialEvents={events}
-      canAdminister={isAllowedAdminEmail(employee.email)}
+      canAdminister={canAdminister}
+      travelers={travelers}
       initialError={calendarError}
     />
   );

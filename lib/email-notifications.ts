@@ -1,9 +1,8 @@
-import type { StoredVisitRequest } from "@/lib/db";
-import { INITIAL_ADMIN_EMAIL } from "@/lib/admin-policy";
+import { listActiveAdminEmails, type StoredVisitRequest } from "@/lib/db";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
-const GMAIL_PROFILE_API = "https://gmail.googleapis.com/gmail/v1/users/me/profile";
+const GOOGLE_USERINFO_API = "https://openidconnect.googleapis.com/v1/userinfo";
 type Fetch = typeof fetch;
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
@@ -59,15 +58,19 @@ async function accessToken(fetchImpl: Fetch) {
 export async function verifyEmailNotificationConnection(fetchImpl: Fetch = fetch) {
   if (!emailNotificationsConfigured()) throw new Error("EMAIL_NOT_CONFIGURED");
   const token = await accessToken(fetchImpl);
-  const response = await fetchImpl(GMAIL_PROFILE_API, {
+  const response = await fetchImpl(GOOGLE_USERINFO_API, {
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
   if (!response.ok) throw new Error(`Gmail sender verification failed with HTTP ${response.status}`);
-  const result = (await response.json()) as { emailAddress?: string };
-  const email = result.emailAddress?.trim().toLowerCase() ?? "";
-  if (!/^[^\s@]+@shiphero\.com$/.test(email)) throw new Error("Gmail sender must use a ShipHero email address");
+  const result = (await response.json()) as { email?: string; email_verified?: boolean; hd?: string };
+  const email = result.email?.trim().toLowerCase() ?? "";
+  if (!result.email_verified || result.hd !== "shiphero.com" || !/^[^\s@]+@shiphero\.com$/.test(email)) {
+    throw new Error("Gmail sender must be a verified ShipHero account");
+  }
+  const expectedSender = process.env.GOOGLE_EMAIL_SENDER?.trim().toLowerCase();
+  if (expectedSender && email !== expectedSender) throw new Error("Gmail sender does not match the configured account");
   return email;
 }
 
@@ -116,9 +119,10 @@ function requestDetails(request: StoredVisitRequest) {
   ].join("\n");
 }
 
-export function notifyNewRequest(request: StoredVisitRequest, fetchImpl: Fetch = fetch) {
+export async function notifyNewRequest(request: StoredVisitRequest, fetchImpl: Fetch = fetch) {
+  const admins = await listActiveAdminEmails(fetchImpl).catch(() => ["mike.azimi@shiphero.com"]);
   return sendNotificationBestEffort(
-    [process.env.ADMIN_NOTIFICATION_EMAIL ?? INITIAL_ADMIN_EMAIL],
+    process.env.ADMIN_NOTIFICATION_EMAIL ? [process.env.ADMIN_NOTIFICATION_EMAIL] : admins,
     `Travel request: ${request.accountName}`,
     `${request.requesterName || request.requesterEmail} submitted a travel request.\n\n${requestDetails(request)}\n\nReview: ${appOrigin()}/admin`,
     fetchImpl,

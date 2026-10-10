@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { adminAuthConfigured, getAdminSession, INITIAL_ADMIN_EMAIL } from "@/lib/admin-auth";
-import { databaseConfigured, listVisitRequests } from "@/lib/db";
+import { databaseConfigured, listActiveTravelers, listVisitRequests } from "@/lib/db";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { googleCalendarConfigured } from "@/lib/google-calendar";
 import { ConnectorHealthPanel } from "@/components/connector-health-panel";
@@ -18,7 +18,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <section className="admin-card">
           <p className="eyebrow">Central Ops Travel</p>
           <h1>Travel approvals</h1>
-          <p>Sign in as {INITIAL_ADMIN_EMAIL} to review requests, assign travelers, and schedule visits.</p>
+          <p>Sign in with an authorized administrator account to review requests, assign travelers, and schedule visits.</p>
           {error && <div className="submit-status error">That Google account is not authorized.</div>}
           {adminAuthConfigured() ? (
             <a className="btn-primary admin-signin" href={googleSignInHref()}>Sign in with Google</a>
@@ -49,6 +49,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <Link href="/calendar">Calendar view</Link>
           <Link href="/how-to-use">How to use</Link>
           <Link href="/admin" className="active" aria-current="page">Approvals</Link>
+          <Link href="/admin/settings">Admin settings</Link>
         </nav>
         <div className="admin-header">
           <div><p className="eyebrow">Signed in as {session.email}</p><h1>Travel approvals</h1></div>
@@ -61,9 +62,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             Calendar: {calendarReady ? "connected" : "pending"}
           </div>
         )}
-        <p>Only {INITIAL_ADMIN_EMAIL} can approve, deny, assign a traveler, or directly schedule a visit.</p>
+        <p>Authorized administrators can approve, deny, assign a traveler, and manage access.</p>
         <ConnectorHealthPanel />
-        {hasDatabase && !storageError && <AdminDashboard initialRequests={requests} />}
+        {hasDatabase && !storageError && <AdminDashboard initialRequests={requests} travelers={await listActiveTravelers()} />}
       </section>
     </main>
   );
