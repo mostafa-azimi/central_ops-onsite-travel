@@ -1,0 +1,28 @@
+name: Calendar reconciliation
+
+on:
+  schedule:
+    - cron: "23 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    env:
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+      OPERATIONS_CRON_SECRET: ${{ secrets.OPERATIONS_CRON_SECRET }}
+    steps:
+      - name: Run reconciliation when configured
+        if: env.PRODUCTION_URL != '' && env.OPERATIONS_CRON_SECRET != ''
+        run: |
+          curl --fail --silent --show-error --max-time 120 \
+            --request POST \
+            --header "Authorization: Bearer $OPERATIONS_CRON_SECRET" \
+            "$PRODUCTION_URL/api/operations/reconcile"
+      - name: Explain pending configuration
+        if: env.PRODUCTION_URL == '' || env.OPERATIONS_CRON_SECRET == ''
+        run: |
+          echo "Set the PRODUCTION_URL repository variable and OPERATIONS_CRON_SECRET repository and deployment secret to enable daily reconciliation."

@@ -7,6 +7,7 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REQUESTS_TAB = "Requests";
 const AUDIT_TAB = "Audit";
 const PEOPLE_TAB = "People";
+const NOTIFICATIONS_TAB = "Notifications";
 const REQUEST_COLUMN_COUNT = 50;
 const REQUEST_RANGE_END = "AX";
 type Fetch = typeof fetch;
@@ -33,6 +34,35 @@ export const PEOPLE_HEADERS = [
   "email", "display_name", "is_traveler", "is_admin", "map_color", "active",
   "created_at", "updated_at", "updated_by_email",
 ] as const;
+
+export const NOTIFICATION_HEADERS = [
+  "id", "request_id", "kind", "created_at", "updated_at", "recipients_json",
+  "subject", "body", "status", "attempts", "last_error", "sent_at",
+] as const;
+
+export type AuditEntry = {
+  id: string;
+  requestId: string;
+  createdAt: string;
+  actorEmail: string;
+  action: string;
+  details: Record<string, unknown>;
+};
+
+export type NotificationRecord = {
+  id: string;
+  requestId: string;
+  kind: string;
+  createdAt: string;
+  updatedAt: string;
+  recipients: string[];
+  subject: string;
+  body: string;
+  status: "pending" | "sent" | "failed";
+  attempts: number;
+  lastError: string;
+  sentAt: string;
+};
 
 const PEOPLE_COLORS = TRAVELER_COLOR_OPTIONS.map(({ value }) => value);
 
@@ -75,6 +105,8 @@ let cachedPeople: { value: ManagedPerson[]; expiresAt: number } | null = null;
 let schemaEnsured = false;
 let peopleSchemaEnsured = false;
 let peopleSchemaPromise: Promise<void> | null = null;
+let operationsSchemaEnsured = false;
+let operationsSchemaPromise: Promise<void> | null = null;
 
 export function databaseConfigured() {
   return Boolean(
@@ -301,7 +333,7 @@ async function readRows(fetchImpl: Fetch = fetch) {
 }
 
 async function appendValues(tab: string, values: string[], fetchImpl: Fetch) {
-  const rangeEnd = tab === REQUESTS_TAB ? REQUEST_RANGE_END : tab === PEOPLE_TAB ? "I" : "F";
+  const rangeEnd = tab === REQUESTS_TAB ? REQUEST_RANGE_END : tab === PEOPLE_TAB ? "I" : tab === NOTIFICATIONS_TAB ? "L" : "F";
   const range = encodeURIComponent(`${tab}!A:${rangeEnd}`);
   await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
@@ -335,6 +367,136 @@ async function appendAudit(requestId: string, actorEmail: string, action: string
   await appendValues(AUDIT_TAB, [
     randomUUID(), requestId, new Date().toISOString(), actorEmail, action, JSON.stringify(details),
   ], fetchImpl);
+}
+
+function jsonObject(value: string) {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function jsonStrings(value: string) {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function initializeOperationsSchema(fetchImpl: Fetch = fetch) {
+  const metadata = await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}?fields=sheets.properties.title`,
+    { method: "GET" },
+    fetchImpl,
+  );
+  const body = (await metadata.json()) as { sheets?: Array<{ properties?: { title?: string } }> };
+  const titles = new Set((body.sheets ?? []).map((sheet) => sheet.properties?.title));
+  for (const tab of [AUDIT_TAB, NOTIFICATIONS_TAB]) {
+    if (titles.has(tab)) continue;
+    try {
+      await sheetsFetch(
+        `/spreadsheets/${encodeURIComponent(spreadsheetId())}:batchUpdate`,
+        { method: "POST", body: JSON.stringify({ requests: [{ addSheet: { properties: { title: tab, gridProperties: { frozenRowCount: 1 } } } }] }) },
+        fetchImpl,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (!message.includes(`A sheet with the name \"${tab}\" already exists`)) throw error;
+    }
+  }
+  await sheetsFetch(
+    `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values:batchUpdate`,
+    {
+      method: "POST",
+      body: JSON.stringify({ valueInputOption: "RAW", data: [
+        { range: `${AUDIT_TAB}!A1:F1`, majorDimension: "ROWS", values: [[...AUDIT_HEADERS]] },
+        { range: `${NOTIFICATIONS_TAB}!A1:L1`, majorDimension: "ROWS", values: [[...NOTIFICATION_HEADERS]] },
+      ] }),
+    },
+    fetchImpl,
+  );
+}
+
+async function ensureOperationsSchema(fetchImpl: Fetch = fetch) {
+  if (operationsSchemaEnsured) return;
+  if (!operationsSchemaPromise) {
+    operationsSchemaPromise = initializeOperationsSchema(fetchImpl)
+      .then(() => { operationsSchemaEnsured = true; })
+      .finally(() => { operationsSchemaPromise = null; });
+  }
+  await operationsSchemaPromise;
+}
+
+export async function listAuditEntries(limit = 200, fetchImpl: Fetch = fetch): Promise<AuditEntry[]> {
+  await ensureOperationsSchema(fetchImpl);
+  const range = encodeURIComponent(`${AUDIT_TAB}!A2:F10001`);
+  const response = await sheetsFetch(`/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}?majorDimension=ROWS`, { method: "GET" }, fetchImpl);
+  const body = (await response.json()) as { values?: string[][] };
+  return (body.values ?? []).map((values) => ({
+    id: cell(values, 0), requestId: cell(values, 1), createdAt: cell(values, 2),
+    actorEmail: cell(values, 3), action: cell(values, 4), details: jsonObject(cell(values, 5)),
+  })).filter((entry) => entry.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, Math.min(Math.max(limit, 1), 500));
+}
+
+function notificationFromValues(values: string[]): NotificationRecord | null {
+  const id = cell(values, 0);
+  if (!id) return null;
+  return {
+    id, requestId: cell(values, 1), kind: cell(values, 2), createdAt: cell(values, 3), updatedAt: cell(values, 4),
+    recipients: jsonStrings(cell(values, 5)), subject: cell(values, 6), body: cell(values, 7),
+    status: (cell(values, 8) || "pending") as NotificationRecord["status"], attempts: Number(cell(values, 9) || 0),
+    lastError: cell(values, 10), sentAt: cell(values, 11),
+  };
+}
+
+async function readNotificationRows(fetchImpl: Fetch = fetch) {
+  await ensureOperationsSchema(fetchImpl);
+  const range = encodeURIComponent(`${NOTIFICATIONS_TAB}!A2:L10001`);
+  const response = await sheetsFetch(`/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}?majorDimension=ROWS`, { method: "GET" }, fetchImpl);
+  const body = (await response.json()) as { values?: string[][] };
+  return (body.values ?? []).map((values, index) => ({ rowNumber: index + 2, record: notificationFromValues(values) })).filter((row): row is { rowNumber: number; record: NotificationRecord } => Boolean(row.record));
+}
+
+function notificationValues(record: NotificationRecord) {
+  return [record.id, record.requestId, record.kind, record.createdAt, record.updatedAt, JSON.stringify(record.recipients), record.subject, record.body, record.status, String(record.attempts), record.lastError, record.sentAt];
+}
+
+export async function createNotificationRecord(input: { key: string; requestId: string; kind: string; recipients: string[]; subject: string; body: string }, fetchImpl: Fetch = fetch) {
+  const id = createHash("sha256").update(input.key).digest("hex").slice(0, 32);
+  const existing = (await readNotificationRows(fetchImpl)).find((row) => row.record.id === id)?.record;
+  if (existing) return existing;
+  const now = new Date().toISOString();
+  const record: NotificationRecord = { id, requestId: input.requestId, kind: input.kind, createdAt: now, updatedAt: now, recipients: input.recipients, subject: input.subject, body: input.body, status: "pending", attempts: 0, lastError: "", sentAt: "" };
+  await appendValues(NOTIFICATIONS_TAB, notificationValues(record), fetchImpl);
+  return record;
+}
+
+export async function listNotificationRecords(limit = 100, fetchImpl: Fetch = fetch) {
+  return (await readNotificationRows(fetchImpl)).map((row) => row.record).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, Math.min(Math.max(limit, 1), 500));
+}
+
+export async function getNotificationRecord(id: string, fetchImpl: Fetch = fetch) {
+  return (await readNotificationRows(fetchImpl)).find((row) => row.record.id === id)?.record ?? null;
+}
+
+export async function markNotificationResult(id: string, result: { sent: boolean; error?: string }, actorEmail = "system", fetchImpl: Fetch = fetch) {
+  const row = (await readNotificationRows(fetchImpl)).find((item) => item.record.id === id);
+  if (!row) return null;
+  const now = new Date().toISOString();
+  const record: NotificationRecord = { ...row.record, updatedAt: now, status: result.sent ? "sent" : "failed", attempts: row.record.attempts + 1, lastError: result.sent ? "" : String(result.error ?? "Email delivery failed").slice(0, 500), sentAt: result.sent ? now : row.record.sentAt };
+  const rangeName = `${NOTIFICATIONS_TAB}!A${row.rowNumber}:L${row.rowNumber}`;
+  await sheetsFetch(`/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(rangeName)}?valueInputOption=RAW`, { method: "PUT", body: JSON.stringify({ range: rangeName, majorDimension: "ROWS", values: [notificationValues(record)] }) }, fetchImpl);
+  await appendAudit(record.requestId || "notification", actorEmail, result.sent ? "notification_sent" : "notification_failed", { notificationId: id, kind: record.kind, attempts: record.attempts, error: record.lastError }, fetchImpl);
+  return record;
+}
+
+export async function recordOperationalAudit(action: string, details: object, actorEmail = "system", requestId = "operations", fetchImpl: Fetch = fetch) {
+  await ensureOperationsSchema(fetchImpl);
+  await appendAudit(requestId, actorEmail, action, details, fetchImpl);
 }
 
 function booleanCell(value: string) {
@@ -844,6 +1006,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
         { properties: { title: REQUESTS_TAB, gridProperties: { frozenRowCount: 1, columnCount: REQUEST_COLUMN_COUNT } } },
         { properties: { title: AUDIT_TAB, gridProperties: { frozenRowCount: 1 } } },
         { properties: { title: PEOPLE_TAB, gridProperties: { frozenRowCount: 1, columnCount: PEOPLE_HEADERS.length } } },
+        { properties: { title: NOTIFICATIONS_TAB, gridProperties: { frozenRowCount: 1, columnCount: NOTIFICATION_HEADERS.length } } },
       ],
     }),
     cache: "no-store",
@@ -862,6 +1025,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
           { range: `${REQUESTS_TAB}!A1:${REQUEST_RANGE_END}1`, majorDimension: "ROWS", values: [[...REQUEST_HEADERS]] },
           { range: `${AUDIT_TAB}!A1:F1`, majorDimension: "ROWS", values: [[...AUDIT_HEADERS]] },
           { range: `${PEOPLE_TAB}!A1:I1`, majorDimension: "ROWS", values: [[...PEOPLE_HEADERS]] },
+          { range: `${NOTIFICATIONS_TAB}!A1:L1`, majorDimension: "ROWS", values: [[...NOTIFICATION_HEADERS]] },
         ],
       }),
     },
@@ -876,4 +1040,6 @@ export function clearGoogleSheetsTokenCacheForTests() {
   schemaEnsured = false;
   peopleSchemaEnsured = false;
   peopleSchemaPromise = null;
+  operationsSchemaEnsured = false;
+  operationsSchemaPromise = null;
 }

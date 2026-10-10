@@ -147,7 +147,7 @@ export function TravelCalendar({
         <Link href="/map">Map view</Link>
         <Link href="/calendar" className="active" aria-current="page">Calendar view</Link>
         <Link href="/how-to-use">How to use</Link>
-        {canAdminister && <><Link href="/admin">Approvals</Link><Link href="/admin/settings">Admin settings</Link></>}
+        {canAdminister && <><Link href="/admin">Approvals</Link><Link href="/admin/settings">Admin settings</Link><Link href="/admin/operations">Operations</Link></>}
       </nav>
 
       {message && <div className="submit-status error calendar-status" role="status">{message}</div>}

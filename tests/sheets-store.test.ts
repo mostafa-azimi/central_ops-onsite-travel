@@ -201,7 +201,7 @@ test("requester date changes remain pending until an approver applies them", asy
   assert.ok(store.audit.some((row) => row[4] === "cancel_change_denied"));
 });
 
-test("Sheet setup creates Requests, Audit, and People tabs with fixed headers", async () => {
+test("Sheet setup creates Requests, Audit, People, and Notifications tabs with fixed headers", async () => {
   configure();
   delete process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
   let createBody: Record<string, unknown> | null = null;
@@ -222,7 +222,7 @@ test("Sheet setup creates Requests, Audit, and People tabs with fixed headers", 
 
   assert.equal(await createPrivateRequestSpreadsheet(fakeFetch), "created-sheet");
   const create = createBody as unknown as { sheets: Array<{ properties: { title: string } }> };
-  assert.deepEqual(create.sheets.map((sheet) => sheet.properties.title), ["Requests", "Audit", "People"]);
+  assert.deepEqual(create.sheets.map((sheet) => sheet.properties.title), ["Requests", "Audit", "People", "Notifications"]);
   const batch = batchBody as unknown as { data: Array<{ range: string }> };
-  assert.deepEqual(batch.data.map((item) => item.range), ["Requests!A1:AX1", "Audit!A1:F1", "People!A1:I1"]);
+  assert.deepEqual(batch.data.map((item) => item.range), ["Requests!A1:AX1", "Audit!A1:F1", "People!A1:I1", "Notifications!A1:L1"]);
 });

@@ -1,0 +1,37 @@
+name: Production uptime
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL || 'https://central-ops-travel-hub.vercel.app' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check public health
+        id: health
+        continue-on-error: true
+        run: curl --fail --silent --show-error --max-time 20 "$PRODUCTION_URL/api/health"
+      - name: Open one incident issue
+        if: steps.health.outcome == 'failure'
+        run: |
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search '"Production health check failed" in:title' --json number --jq '.[0].number')
+          if [ -z "$existing" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Production health check failed" --body "The hourly check could not reach $PRODUCTION_URL/api/health. Review the deployment and recent logs."
+          fi
+      - name: Close recovered incident
+        if: steps.health.outcome == 'success'
+        run: |
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search '"Production health check failed" in:title' --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "The hourly health check recovered."
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY"
+          fi

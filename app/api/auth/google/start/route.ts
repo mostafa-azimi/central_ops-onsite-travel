@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   const redirectUri = `${appOrigin(request)}/api/auth/google/callback`;
   const requestedReturnTo = new URL(request.url).searchParams.get("returnTo");
-  const returnTo = ["/", "/?view=submit", "/map", "/calendar", "/admin", "/admin/settings"].includes(requestedReturnTo ?? "")
+  const returnTo = ["/", "/?view=submit", "/map", "/calendar", "/admin", "/admin/settings", "/admin/operations"].includes(requestedReturnTo ?? "")
     ? requestedReturnTo!
     : "/admin";
   const authorizationUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");

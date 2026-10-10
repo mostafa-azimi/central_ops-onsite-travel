@@ -50,6 +50,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <Link href="/how-to-use">How to use</Link>
           <Link href="/admin" className="active" aria-current="page">Approvals</Link>
           <Link href="/admin/settings">Admin settings</Link>
+          <Link href="/admin/operations">Operations</Link>
         </nav>
         <div className="admin-header">
           <div><p className="eyebrow">Signed in as {session.email}</p><h1>Travel approvals</h1></div>

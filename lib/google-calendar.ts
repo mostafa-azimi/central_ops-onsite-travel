@@ -346,6 +346,27 @@ export async function cancelCalendarEvent(eventId: string, fetchImpl: Fetch = fe
   }
 }
 
+export async function inspectCalendarEvent(
+  request: { id: string; calendarEventId: string; assignedTraveler: string; accountName: string; start: string; end: string },
+  fetchImpl: Fetch = fetch,
+) {
+  const token = await getGoogleAccessToken(fetchImpl);
+  const url = `${CALENDAR_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(request.calendarEventId)}`;
+  const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+  if (response.status === 404 || response.status === 410) return ["Calendar event is missing"];
+  if (!response.ok) throw new Error(`Calendar reconciliation failed: ${await responseMessage(response)}`);
+  const event = (await response.json()) as GoogleEvent;
+  const issues: string[] = [];
+  if (event.status === "cancelled") issues.push("Calendar event is cancelled");
+  if (event.extendedProperties?.private?.centralOpsRequestId !== request.id) issues.push("Request ID does not match");
+  if (event.summary !== `${request.assignedTraveler}: ${request.accountName}`) issues.push("Title or traveler does not match");
+  if (event.start?.date !== request.start || event.end?.date !== inclusiveEndToExclusive(request.end)) issues.push("Dates do not match");
+  const travelers = await listKnownTravelers(fetchImpl);
+  const travelerEmail = travelers.find((person) => person.name === request.assignedTraveler)?.email.toLowerCase();
+  if (!travelerEmail || !(event.attendees ?? []).some((attendee) => attendee.email?.toLowerCase() === travelerEmail && attendee.responseStatus !== "declined")) issues.push("Assigned traveler is not attending");
+  return issues;
+}
+
 function deterministicEventId(requestId: string) {
   return `cot${requestId.replace(/-/g, "").toLowerCase()}`;
 }

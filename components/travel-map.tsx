@@ -131,7 +131,7 @@ export function TravelMap({
         <Link href="/map" className="active" aria-current="page">Map view</Link>
         <Link href="/calendar">Calendar view</Link>
         <Link href="/how-to-use">How to use</Link>
-        {canAdminister && <><Link href="/admin">Approvals</Link><Link href="/admin/settings">Admin settings</Link></>}
+        {canAdminister && <><Link href="/admin">Approvals</Link><Link href="/admin/settings">Admin settings</Link><Link href="/admin/operations">Operations</Link></>}
       </nav>
       {message && <div className="submit-status error" role="status">{message}</div>}
       <section className="map-layout">

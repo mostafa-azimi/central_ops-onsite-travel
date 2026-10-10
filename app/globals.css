@@ -321,6 +321,12 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .admin-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
 .admin-card a:not(.btn-primary) { color: var(--primary); font-weight: 750; }
 .approval-list { display: grid; gap: 8px; margin-top: 18px; }
+.approval-toolbar { display: grid; grid-template-columns: minmax(190px, 1.4fr) repeat(2, minmax(140px, .8fr)) auto auto; gap: 10px; align-items: end; margin: 24px 0; padding: 14px; border: 1px solid var(--line); background: var(--surface-muted); }
+.approval-toolbar label:not(.approval-conflict-filter) { display: grid; gap: 5px; }
+.approval-toolbar label > span { color: var(--text-muted); font-size: .68rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.approval-toolbar input[type="search"], .approval-toolbar select, .compact-search input { min-height: 40px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--input); color: var(--text); }
+.approval-conflict-filter { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; white-space: nowrap; }
+.approval-conflict-filter input { accent-color: var(--blood); }
 .approval-card { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; padding: 17px; border: 1px solid var(--line); border-radius: 4px; }
 .approval-card p { margin: 6px 0; color: var(--text-muted); }
 .readiness-review { max-width: 680px; margin: 14px 0; padding: 13px 14px; border: 1px solid var(--line); background: var(--surface-muted); }
@@ -380,6 +386,24 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .role-badges span { padding: 3px 6px; border: 1px solid var(--line-strong); color: var(--text-muted); font-size: .66rem; font-weight: 800; text-transform: uppercase; }
 .inactive-people > summary { cursor: pointer; font-weight: 800; }
 .inactive-people .people-list { margin-top: 16px; }
+.operations-dashboard { display: grid; gap: 18px; }
+.operations-section > p { color: var(--text-muted); }
+.operations-list { display: grid; gap: 8px; }
+.operations-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); background: var(--surface-muted); }
+.operations-list article > div { display: grid; gap: 3px; }
+.operations-list article span, .operations-list article small { color: var(--text-muted); }
+.operations-list article p { grid-column: 1 / -1; margin: 0; color: var(--blood); font-size: .78rem; }
+.operation-status { padding: 4px 7px; border: 1px solid var(--line-strong); font-size: .68rem; font-weight: 800; text-transform: uppercase; }
+.operation-status.sent { border-color: #32b76c; color: #237e4b; }
+.operation-status.failed { border-color: var(--blood); color: var(--blood); }
+.audit-table { display: grid; gap: 1px; border: 1px solid var(--line); background: var(--line); }
+.audit-table article { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(190px, .7fr) auto; gap: 16px; align-items: center; padding: 11px 13px; background: var(--surface); }
+.audit-table article > div { display: grid; gap: 2px; }
+.audit-table span, .audit-table small { color: var(--text-muted); font-size: .78rem; }
+.audit-table summary { color: var(--primary); cursor: pointer; font-weight: 800; }
+.audit-table pre { max-width: 520px; overflow: auto; padding: 9px; background: var(--surface-muted); font-size: .7rem; white-space: pre-wrap; }
+.compact-search input { width: min(300px, 100%); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
 .map-shell { width: min(1440px, 100%); margin: 0 auto; padding: 72px 28px 48px; }
 .map-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 30px; padding-bottom: 22px; border-bottom: 1px solid var(--line); }
@@ -546,6 +570,7 @@ footer { padding: 0 24px 34px; color: var(--text-muted); font-size: .76rem; }
   .admin-card { padding: 26px 20px; }
   .admin-header { flex-direction: column; }
   .approval-card { grid-template-columns: 1fr; }
+  .approval-toolbar { grid-template-columns: 1fr; align-items: stretch; }
   .approval-actions { align-items: stretch; flex-direction: column; }
   .connector-health { grid-template-columns: 1fr; }
   .connector-health ul { grid-column: auto; }
@@ -557,6 +582,8 @@ footer { padding: 0 24px 34px; color: var(--text-muted); font-size: .76rem; }
   .person-row { grid-template-columns: auto 1fr; }
   .person-actions { grid-column: 1 / -1; flex-wrap: wrap; }
   .security-note { grid-template-columns: 1fr; }
+  .settings-panel-heading { align-items: stretch; flex-direction: column; }
+  .operations-list article, .audit-table article { grid-template-columns: 1fr; align-items: start; }
   .map-shell, .calendar-shell { padding: 72px 16px 40px; }
   .map-layout { grid-template-columns: 1fr; }
   .travel-map { min-height: 420px; }

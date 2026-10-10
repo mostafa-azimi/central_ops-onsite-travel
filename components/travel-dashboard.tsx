@@ -232,7 +232,7 @@ export function TravelDashboard({
           <Link href="/map">Map view</Link>
           <Link href="/calendar">Calendar view</Link>
           <Link href="/how-to-use">How to use</Link>
-          {canAdminister && <><Link href="/admin">Approvals</Link><Link href="/admin/settings">Admin settings</Link></>}
+          {canAdminister && <><Link href="/admin">Approvals</Link><Link href="/admin/settings">Admin settings</Link><Link href="/admin/operations">Operations</Link></>}
         </nav>
 
         {view === "schedule" ? (

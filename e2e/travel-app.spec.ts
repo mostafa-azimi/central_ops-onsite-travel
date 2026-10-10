@@ -129,6 +129,17 @@ test("administrator can manage traveler and administrator access", async ({ page
   await expectAccessible(page);
 });
 
+test("administrator can review operational history and Calendar integrity", async ({ page }) => {
+  await authenticate(page, "admin");
+  await page.goto("/admin/operations");
+  await expect(page.getByRole("heading", { name: "Operations", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Reconciliation" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Audit history" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run Calendar check" })).toBeVisible();
+  await expectAccessible(page);
+});
+
 test("verified employee can open the map and traveler legend", async ({ page }) => {
   await authenticate(page, "employee");
   await page.goto("/map");

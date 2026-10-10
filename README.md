@@ -23,7 +23,7 @@ The public schedule remains anonymous, but submitting a visit requires a verifie
 
 `/how-to-use` is a public onboarding guide with a 71-second narrated walkthrough, selectable English captions, an inline transcript, written documentation, an automatic Calendar workflow summary, and frequently asked questions. The tutorial uses mock customer information and does not expose Calendar or request data. `npm run video:build` reproduces the MP4, poster, and WebVTT caption file locally using Playwright, macOS text-to-speech, and the development-only FFmpeg package.
 
-Traveler assignment, approval, denial, and direct scheduling live on `/admin`. Google OpenID Connect is verified server-side against Google's signing keys, and the verified email must be an active administrator in the private people directory. The directory is managed at `/admin/settings`; administrators can add or deactivate exact `@shiphero.com` identities and grant traveler, administrator, or both roles. The initial administrator is `mike.azimi@shiphero.com`, the last active administrator cannot remove their own administrative access, and every directory change is written to the private audit log. The existing direct-schedule endpoint also requires a verified administrator session.
+Traveler assignment, approval, and denial live on `/admin`. Google OpenID Connect is verified server-side against Google's signing keys, and the verified email must be an active administrator in the private people directory. The directory is managed at `/admin/settings`; administrators can add or deactivate exact `@shiphero.com` identities and grant traveler, administrator, or both roles. The initial administrator is `mike.azimi@shiphero.com`, the last active administrator cannot remove their own administrative access, and every directory change is written to the private audit log.
 
 Google administrator sign-in requires a separate web OAuth client with redirect URI `https://central-ops-travel-hub.vercel.app/api/auth/google/callback` and environment variables `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Administrator access is loaded from the private Sheet-backed people directory and fails closed if that configured directory cannot be read. Until OAuth and durable storage are configured, the public request and administrator actions fail closed and never return mock success.
 
@@ -35,7 +35,11 @@ The public request form accepts manually entered international addresses. Postal
 
 The map and postal-code lookup require no API key, billing account, or paid plan. OpenStreetMap tiles and Zippopotam.us are best-effort services without an availability guarantee. The application uses visible OpenStreetMap attribution, loads only tiles viewed by the employee, debounces lookups, rate-limits its server endpoints, caches upstream results, and always preserves manual address entry.
 
-Email notifications are best effort and never roll back a successfully saved request or Calendar action. New requests notify every active administrator; approvals, denials, reschedules, cancellations, and requester change decisions notify the verified requester. Recipients are restricted to `@shiphero.com`. Delivery requires the Gmail API and a dedicated sender OAuth grant using `https://www.googleapis.com/auth/gmail.send`, plus the standard `openid email` identity scopes so the connection check can confirm the exact sender without reading mailbox content or sending a test message. Set `GOOGLE_EMAIL_CLIENT_ID`, `GOOGLE_EMAIL_CLIENT_SECRET`, `GOOGLE_EMAIL_REFRESH_TOKEN`, and `GOOGLE_EMAIL_SENDER` in each deployment environment.
+Email notifications never roll back a successfully saved request or Calendar action. Every delivery is recorded in the private `Notifications` Sheet tab with a stable key, delivery status, attempt count, and error. Administrators can review and retry failures from `/admin/operations`. New requests notify every active administrator; approvals, denials, reschedules, cancellations, requester change decisions, and Calendar reconciliation problems notify the appropriate verified employees. Recipients are restricted to `@shiphero.com`. Delivery requires the Gmail API and a dedicated sender OAuth grant using `https://www.googleapis.com/auth/gmail.send`, plus the standard `openid email` identity scopes so the connection check can confirm the exact sender without reading mailbox content or sending a test message. Set `GOOGLE_EMAIL_CLIENT_ID`, `GOOGLE_EMAIL_CLIENT_SECRET`, `GOOGLE_EMAIL_REFRESH_TOKEN`, and `GOOGLE_EMAIL_SENDER` in each deployment environment.
+
+## Operations and audit
+
+`/admin/operations` is restricted to active administrators. It provides searchable audit history, notification delivery status and retry, and a read-only Google Calendar reconciliation check. The check compares approved requests with managed Calendar events and flags missing events, changed dates, title or traveler mismatches, and missing assigned attendees. It does not automatically overwrite Calendar edits. A daily authenticated reconciliation endpoint is available at `/api/operations/reconcile` when `OPERATIONS_CRON_SECRET` is configured in both the deployment and GitHub Actions.
 
 ### Gmail sender setup
 
@@ -52,6 +56,7 @@ Required runtime configuration:
 - `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET` for verified employee and administrator sign-in
 - `GOOGLE_EMAIL_CLIENT_ID`, `GOOGLE_EMAIL_CLIENT_SECRET`, `GOOGLE_EMAIL_REFRESH_TOKEN`, and `GOOGLE_EMAIL_SENDER` for approved Gmail notifications
 - optional `ADMIN_NOTIFICATION_EMAIL`, defaulting to `mike.azimi@shiphero.com`
+- `OPERATIONS_CRON_SECRET` for the daily authenticated Calendar reconciliation job
 
 All credentials remain server-side. The application fails closed when any required connection is absent and never returns a mock write success.
 
@@ -68,10 +73,13 @@ npm test
 npm run test:e2e
 npm run lint
 npm run build
+npm run verify:deployment -- https://your-deployment.example.com
 npm run dev
 ```
 
 The Playwright suite runs desktop and mobile Chromium flows, uses a development-only test identity gate that is disabled in production, checks accessibility with axe, and does not write to Google Calendar or the private request Sheet.
+
+GitHub Actions runs unit tests, lint, the production build, and desktop/mobile browser tests for every pull request and push to `main`. A separate hourly workflow checks `/api/health`, opens one GitHub incident issue when production is unavailable, and closes it after recovery. Set the `PRODUCTION_URL` repository variable to the active Railway origin during cutover. GitHub issue notifications provide the external uptime alert path.
 
 ## Docker and Railway
 
@@ -93,6 +101,8 @@ Railway automatically detects the root `Dockerfile`. Configure `/api/health` as 
 5. Add `${APP_ORIGIN}/api/auth/google/callback` to the existing `Central Ops Travel Admin` Google Web OAuth client.
 6. Redeploy after the variables and callback are configured. Sign in at `/admin`, run **Check connections**, and confirm Google sign-in, Sheets, Calendar, and email are green.
 7. Verify `/`, `/map`, `/calendar`, `/admin`, and `/admin/settings` before redirecting users away from Vercel.
+8. Set the GitHub `PRODUCTION_URL` repository variable to the Railway origin. Store the same new `OPERATIONS_CRON_SECRET` in Railway and GitHub Actions secrets, then run the Calendar reconciliation workflow once.
+9. Run `npm run verify:deployment -- https://your-railway-origin` from a trusted workstation.
 
 The app stores durable workflow data in its private Google Sheet, so Railway does not need a database or persistent volume. Keep Vercel active until the Railway connection check and employee sign-in both pass.
 

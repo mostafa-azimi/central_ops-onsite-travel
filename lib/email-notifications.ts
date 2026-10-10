@@ -1,4 +1,4 @@
-import { listActiveAdminEmails, type StoredVisitRequest } from "@/lib/db";
+import { createNotificationRecord, getNotificationRecord, listActiveAdminEmails, markNotificationResult, type StoredVisitRequest } from "@/lib/db";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
@@ -109,6 +109,49 @@ export async function sendNotificationBestEffort(
   }
 }
 
+async function sendDurableNotificationBestEffort(
+  key: string,
+  requestId: string,
+  kind: string,
+  to: string[],
+  subject: string,
+  body: string,
+  fetchImpl: Fetch = fetch,
+) {
+  try {
+    const record = await createNotificationRecord({ key, requestId, kind, recipients: to, subject, body }, fetchImpl);
+    if (record.status === "sent") return true;
+    if (!emailNotificationsConfigured()) {
+      await markNotificationResult(record.id, { sent: false, error: "Gmail sender is not configured" }, "system", fetchImpl);
+      return false;
+    }
+    try {
+      await sendNotificationEmail(record.recipients, record.subject, record.body, fetchImpl);
+      await markNotificationResult(record.id, { sent: true }, "system", fetchImpl);
+      return true;
+    } catch (error) {
+      await markNotificationResult(record.id, { sent: false, error: error instanceof Error ? error.message : "Email delivery failed" }, "system", fetchImpl);
+      return false;
+    }
+  } catch (error) {
+    console.error("Durable email notification failed", error instanceof Error ? error.message : "Unknown error");
+    return sendNotificationBestEffort(to, subject, body, fetchImpl);
+  }
+}
+
+export async function retryNotification(id: string, actorEmail: string, fetchImpl: Fetch = fetch) {
+  if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("INVALID_NOTIFICATION_ID");
+  const record = await getNotificationRecord(id, fetchImpl);
+  if (!record) throw new Error("NOTIFICATION_NOT_FOUND");
+  try {
+    await sendNotificationEmail(record.recipients, record.subject, record.body, fetchImpl);
+    return await markNotificationResult(id, { sent: true }, actorEmail, fetchImpl);
+  } catch (error) {
+    await markNotificationResult(id, { sent: false, error: error instanceof Error ? error.message : "Email delivery failed" }, actorEmail, fetchImpl);
+    throw error;
+  }
+}
+
 function requestDetails(request: StoredVisitRequest) {
   return [
     `Account: ${request.accountName}`,
@@ -121,12 +164,7 @@ function requestDetails(request: StoredVisitRequest) {
 
 export async function notifyNewRequest(request: StoredVisitRequest, fetchImpl: Fetch = fetch) {
   const admins = await listActiveAdminEmails(fetchImpl).catch(() => ["mike.azimi@shiphero.com"]);
-  return sendNotificationBestEffort(
-    process.env.ADMIN_NOTIFICATION_EMAIL ? [process.env.ADMIN_NOTIFICATION_EMAIL] : admins,
-    `Travel request: ${request.accountName}`,
-    `${request.requesterName || request.requesterEmail} submitted a travel request.\n\n${requestDetails(request)}\n\nReview: ${appOrigin()}/admin`,
-    fetchImpl,
-  );
+  return sendDurableNotificationBestEffort(`${request.id}:new-request`, request.id, "new_request", process.env.ADMIN_NOTIFICATION_EMAIL ? [process.env.ADMIN_NOTIFICATION_EMAIL] : admins, `Travel request: ${request.accountName}`, `${request.requesterName || request.requesterEmail} submitted a travel request.\n\n${requestDetails(request)}\n\nReview: ${appOrigin()}/admin`, fetchImpl);
 }
 
 export function notifyRequestDecision(
@@ -135,24 +173,14 @@ export function notifyRequestDecision(
   reason = "",
   fetchImpl: Fetch = fetch,
 ) {
-  return sendNotificationBestEffort(
-    [request.requesterEmail],
-    `Travel request ${decision}: ${request.accountName}`,
-    `Your travel request was ${decision}.${reason ? `\nReason: ${reason}` : ""}\n\n${requestDetails(request)}${request.assignedTraveler ? `\nTraveler: ${request.assignedTraveler}` : ""}\n\nView requests: ${appOrigin()}/?view=submit`,
-    fetchImpl,
-  );
+  return sendDurableNotificationBestEffort(`${request.id}:request-${decision}:${request.lifecycleVersion}`, request.id, `request_${decision}`, [request.requesterEmail], `Travel request ${decision}: ${request.accountName}`, `Your travel request was ${decision}.${reason ? `\nReason: ${reason}` : ""}\n\n${requestDetails(request)}${request.assignedTraveler ? `\nTraveler: ${request.assignedTraveler}` : ""}\n\nView requests: ${appOrigin()}/?view=submit`, fetchImpl);
 }
 
 export function notifyChangeRequested(request: StoredVisitRequest, recipients: string[], fetchImpl: Fetch = fetch) {
   const change = request.pendingChange?.type === "cancel"
     ? "The requester asked to cancel this visit."
     : `The requester proposed new dates: ${request.pendingChange?.start} to ${request.pendingChange?.end}.`;
-  return sendNotificationBestEffort(
-    recipients,
-    `Travel change needs review: ${request.accountName}`,
-    `${change}\n\n${requestDetails(request)}\n\nReview: ${appOrigin()}/?view=submit`,
-    fetchImpl,
-  );
+  return sendDurableNotificationBestEffort(`${request.id}:change-request:${request.pendingChange?.requestedAt ?? request.lifecycleVersion}`, request.id, "change_requested", recipients, `Travel change needs review: ${request.accountName}`, `${change}\n\n${requestDetails(request)}\n\nReview: ${appOrigin()}/?view=submit`, fetchImpl);
 }
 
 export function notifyChangeDecision(
@@ -160,12 +188,7 @@ export function notifyChangeDecision(
   decision: "approved" | "denied",
   fetchImpl: Fetch = fetch,
 ) {
-  return sendNotificationBestEffort(
-    [request.requesterEmail],
-    `Travel change ${decision}: ${request.accountName}`,
-    `Your requested travel change was ${decision}.\n\n${requestDetails(request)}\n\nView requests: ${appOrigin()}/?view=submit`,
-    fetchImpl,
-  );
+  return sendDurableNotificationBestEffort(`${request.id}:change-${decision}:${request.lifecycleVersion}`, request.id, `change_${decision}`, [request.requesterEmail], `Travel change ${decision}: ${request.accountName}`, `Your requested travel change was ${decision}.\n\n${requestDetails(request)}\n\nView requests: ${appOrigin()}/?view=submit`, fetchImpl);
 }
 
 export function notifyVisitUpdated(
@@ -173,12 +196,12 @@ export function notifyVisitUpdated(
   action: "rescheduled" | "cancelled",
   fetchImpl: Fetch = fetch,
 ) {
-  return sendNotificationBestEffort(
-    [request.requesterEmail],
-    `Travel visit ${action}: ${request.accountName}`,
-    `An administrator ${action} this visit.\n\n${requestDetails(request)}\n\nView requests: ${appOrigin()}/?view=submit`,
-    fetchImpl,
-  );
+  return sendDurableNotificationBestEffort(`${request.id}:visit-${action}:${request.lifecycleVersion}`, request.id, `visit_${action}`, [request.requesterEmail], `Travel visit ${action}: ${request.accountName}`, `An administrator ${action} this visit.\n\n${requestDetails(request)}\n\nView requests: ${appOrigin()}/?view=submit`, fetchImpl);
+}
+
+export async function notifyOperationalAlert(key: string, subject: string, body: string, fetchImpl: Fetch = fetch) {
+  const admins = await listActiveAdminEmails(fetchImpl).catch(() => ["mike.azimi@shiphero.com"]);
+  return sendDurableNotificationBestEffort(`operations:${key}`, "operations", "operational_alert", admins, subject, body, fetchImpl);
 }
 
 export function clearEmailTokenCacheForTests() {

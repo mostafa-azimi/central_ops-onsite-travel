@@ -19,7 +19,7 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
   }
   const people = isE2e ? DEFAULT_PEOPLE : await listPeopleDirectory();
   return <main className="admin-shell"><section className="admin-card wide-admin settings-card">
-    <nav className="view-tabs" aria-label="Travel workspace"><Link href="/?view=submit">Requests</Link><Link href="/map">Map view</Link><Link href="/calendar">Calendar view</Link><Link href="/how-to-use">How to use</Link><Link href="/admin">Approvals</Link><Link href="/admin/settings" className="active" aria-current="page">Admin settings</Link></nav>
+    <nav className="view-tabs" aria-label="Travel workspace"><Link href="/?view=submit">Requests</Link><Link href="/map">Map view</Link><Link href="/calendar">Calendar view</Link><Link href="/how-to-use">How to use</Link><Link href="/admin">Approvals</Link><Link href="/admin/settings" className="active" aria-current="page">Admin settings</Link><Link href="/admin/operations">Operations</Link></nav>
     <div className="admin-header"><div><p className="eyebrow">Signed in as {session.email}</p><h1>Admin settings</h1><p>Manage traveler assignments and administrator access.</p></div><form action="/api/auth/signout" method="post"><button className="filter" type="submit">Sign out</button></form></div>
     <div className="security-note"><strong>Protected settings</strong><span>Calendar IDs, OAuth credentials, and private Sheet identifiers stay in server configuration and cannot be changed here.</span></div>
     <PeopleSettings initialPeople={people} currentEmail={session.email} />

@@ -38,6 +38,10 @@ export function AdminDashboard({ initialRequests, travelers }: { initialRequests
     initialRequests.map((request) => [request.id, request.assignedTraveler ?? ""]),
   ));
   const [denialReasons, setDenialReasons] = useState<Record<string, string>>({});
+  const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<"all" | "pending" | "scheduled" | "changes">("all");
+  const [travelerFilter, setTravelerFilter] = useState("");
+  const [conflictsOnly, setConflictsOnly] = useState(false);
 
   async function decide(id: string, action: "approve" | "deny", traveler?: string, accountName?: string, reason?: string) {
     setWorkingId(id);
@@ -148,14 +152,45 @@ export function AdminDashboard({ initialRequests, travelers }: { initialRequests
 
   const pending = requests.filter((request) => request.status === "pending" && !request.calendarEventId);
   const scheduled = requests.filter((request) => request.calendarEventId && request.status !== "cancelled" && request.status !== "denied");
+  function overlaps(request: StoredVisitRequest, traveler: string) {
+    if (!traveler) return [];
+    return scheduled.filter((visit) => visit.id !== request.id && visit.assignedTraveler === traveler && visit.start <= request.end && request.start <= visit.end);
+  }
+  const matches = (request: StoredVisitRequest, kind: "pending" | "scheduled") => {
+    const needle = query.trim().toLowerCase();
+    const traveler = request.assignedTraveler ?? travelerSelections[request.id] ?? "";
+    const text = `${request.accountName} ${request.city} ${request.state} ${request.requesterName} ${request.requesterEmail} ${traveler}`.toLowerCase();
+    const scopeMatch = scope === "all" || scope === kind || (scope === "changes" && Boolean(request.pendingChange));
+    return scopeMatch && (!needle || text.includes(needle)) && (!travelerFilter || traveler === travelerFilter) && (!conflictsOnly || overlaps(request, traveler).length > 0);
+  };
+  const visiblePending = pending.filter((request) => matches(request, "pending"));
+  const visibleScheduled = scheduled.filter((request) => matches(request, "scheduled"));
+
+  function exportCsv() {
+    const rows = [...visiblePending, ...visibleScheduled];
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const csv = [
+      ["status", "account", "type", "traveler", "requester", "city", "state", "start", "end", "confidence"],
+      ...rows.map((request) => [request.status, request.accountName, request.tripType, request.assignedTraveler ?? travelerSelections[request.id] ?? "", request.requesterEmail, request.city, request.state, request.start, request.end, request.dateConfidence]),
+    ].map((row) => row.map(quote).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = `central-ops-travel-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url);
+  }
   return (
     <div>
       {message && <div className={`submit-status ${messageKind}`} role="status">{message}</div>}
-      <h2>{pending.length} pending {pending.length === 1 ? "request" : "requests"}</h2>
+      <section className="approval-toolbar" aria-label="Approval filters">
+        <label><span>Search</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Account, location, requester" /></label>
+        <label><span>Status</span><select value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}><option value="all">All active</option><option value="pending">Pending</option><option value="scheduled">Scheduled</option><option value="changes">Changes requested</option></select></label>
+        <label><span>Traveler</span><select value={travelerFilter} onChange={(event) => setTravelerFilter(event.target.value)}><option value="">All travelers</option>{travelers.map((person) => <option key={person.email} value={person.name}>{person.name}</option>)}</select></label>
+        <label className="approval-conflict-filter"><input type="checkbox" checked={conflictsOnly} onChange={(event) => setConflictsOnly(event.target.checked)} /><span>Conflicts only</span></label>
+        <button className="filter" type="button" onClick={exportCsv} disabled={visiblePending.length + visibleScheduled.length === 0}>Export CSV</button>
+      </section>
+      <h2>{visiblePending.length} pending {visiblePending.length === 1 ? "request" : "requests"}</h2>
       <div className="approval-list">
-        {pending.map((request) => {
+        {visiblePending.map((request) => {
           const selectedTraveler = travelerSelections[request.id] ?? "";
-          const conflicts = scheduled.filter((visit) => visit.assignedTraveler === selectedTraveler && visit.start <= request.end && request.start <= visit.end);
+          const conflicts = overlaps(request, selectedTraveler);
           return <article className="approval-card" key={request.id}>
             <div><h3>{request.accountName || "Account name needed"}</h3><p>{request.tripType} · {request.city}, {request.state} · {request.start} to {request.end}</p><div className="request-badges"><span className={`confidence confidence-${request.dateConfidence}`}>{request.dateConfidence} confidence</span><span className="field-note">Requested by {request.requesterName || request.requesterEmail || "legacy request"}</span></div>{request.tripType === "Onboarding" && <ReadinessReview request={request} />}<a href={request.cashUrl} target="_blank" rel="noreferrer">CASH account {request.cashAccountId}</a></div>
             <div className="approval-actions">
@@ -175,11 +210,11 @@ export function AdminDashboard({ initialRequests, travelers }: { initialRequests
             </div>
           </article>
         })}
-        {pending.length === 0 && <div className="empty-state"><h3>No pending requests</h3></div>}
+        {visiblePending.length === 0 && <div className="empty-state"><h3>No pending requests match</h3></div>}
       </div>
-      <h2 className="admin-section-heading">{scheduled.length} scheduled {scheduled.length === 1 ? "visit" : "visits"}</h2>
+      <h2 className="admin-section-heading">{visibleScheduled.length} scheduled {visibleScheduled.length === 1 ? "visit" : "visits"}</h2>
       <div className="approval-list">
-        {scheduled.map((request) => (
+        {visibleScheduled.map((request) => (
           <article className="scheduled-card" key={request.id}>
             <div className="scheduled-summary"><div><h3>{request.accountName}</h3><p>{request.assignedTraveler} · {request.fullAddress} · {request.start} to {request.end}</p><span className={`confidence confidence-${request.dateConfidence}`}>{request.dateConfidence} confidence</span></div>{request.calendarEventUrl && <a href={request.calendarEventUrl} target="_blank" rel="noreferrer">Calendar event</a>}</div>
             {request.pendingChange && <div className="change-request"><strong>{request.pendingChange.type === "cancel" ? "Requester wants to cancel" : `Requester proposed ${request.pendingChange.start} to ${request.pendingChange.end}`}</strong><span>Submitted by {request.requesterName || request.pendingChange.requestedByEmail}</span><div className="scheduled-actions"><button className="btn-primary" type="button" disabled={workingId === request.id} onClick={() => void decideChange(request.id, "approve_change")}>Approve change</button><button className="filter" type="button" disabled={workingId === request.id} onClick={() => void decideChange(request.id, "deny_change")}>Deny</button></div></div>}
@@ -195,6 +230,7 @@ export function AdminDashboard({ initialRequests, travelers }: { initialRequests
             </div>
           </article>
         ))}
+        {visibleScheduled.length === 0 && <div className="empty-state"><h3>No scheduled visits match</h3></div>}
       </div>
     </div>
   );
