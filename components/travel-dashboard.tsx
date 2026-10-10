@@ -291,7 +291,7 @@ export function TravelDashboard({
             <div className="panel-heading">
               <p className="eyebrow">Request workflow</p>
               <h2 id="submit-heading">Request a customer visit</h2>
-              <p>An approved administrator reviews the request, assigns the traveler, and then creates the Calendar and HubSpot records.</p>
+              <p>An approved administrator reviews the request, assigns the traveler, and then creates the Calendar event.</p>
             </div>
             {!requestStorageConfigured && (
               <div className="setup-note"><strong>Private request Sheet setup in progress</strong><span>The form validates now but will not report success until the request is saved durably.</span></div>

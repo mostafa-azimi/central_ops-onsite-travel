@@ -103,7 +103,6 @@ test("administrator can open approvals and run non-mutating connection checks", 
   await page.getByRole("button", { name: "Check connections" }).click();
   await expect(page.getByRole("listitem").filter({ hasText: "Google sign-in" })).toBeVisible();
   await expect(page.getByRole("listitem").filter({ hasText: "Email notifications" })).toBeVisible();
-  await expect(page.getByText("HubSpot", { exact: true })).toHaveCount(0);
   await expectAccessible(page);
   await page.screenshot({ path: testInfo.outputPath("admin-health.png"), fullPage: true });
 });

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { additionalParticipantNames, cancelCalendarEvent, createOrGetCalendarEvent, googleEventToPublic, rescheduleCalendarEvent, updateCalendarAttendance } from "@/lib/google-calendar";
-import { createOrGetHubSpotMeeting, findVerifiedCompany, meetingTimes } from "@/lib/hubspot";
 import { approvalConnectionError } from "@/lib/approve-request";
 import type { StoredVisitRequest } from "@/lib/db";
 import { READINESS_ITEMS, type ReadinessAnswers } from "@/lib/submissions";
@@ -35,8 +34,6 @@ const request: StoredVisitRequest = {
   decidedByEmail: null,
   calendarEventId: null,
   calendarEventUrl: null,
-  hubspotMeetingId: null,
-  hubspotCompanyId: null,
   syncStatus: "syncing_calendar",
   syncError: null,
   syncAttempts: 1,
@@ -52,16 +49,13 @@ const request: StoredVisitRequest = {
 };
 
 test("approval connection status identifies only the missing service", () => {
-  const originalHubSpot = process.env.HUBSPOT_ACCESS_TOKEN;
   const originalClientId = process.env.GOOGLE_CALENDAR_CLIENT_ID;
   const originalClientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
   const originalRefresh = process.env.GOOGLE_CALENDAR_REFRESH_TOKEN;
   process.env.GOOGLE_CALENDAR_CLIENT_ID = "calendar-client";
   process.env.GOOGLE_CALENDAR_CLIENT_SECRET = "calendar-secret";
   process.env.GOOGLE_CALENDAR_REFRESH_TOKEN = "calendar-refresh";
-  delete process.env.HUBSPOT_ACCESS_TOKEN;
   assert.equal(approvalConnectionError(), null);
-  if (originalHubSpot === undefined) delete process.env.HUBSPOT_ACCESS_TOKEN; else process.env.HUBSPOT_ACCESS_TOKEN = originalHubSpot;
   if (originalClientId === undefined) delete process.env.GOOGLE_CALENDAR_CLIENT_ID; else process.env.GOOGLE_CALENDAR_CLIENT_ID = originalClientId;
   if (originalClientSecret === undefined) delete process.env.GOOGLE_CALENDAR_CLIENT_SECRET; else process.env.GOOGLE_CALENDAR_CLIENT_SECRET = originalClientSecret;
   if (originalRefresh === undefined) delete process.env.GOOGLE_CALENDAR_REFRESH_TOKEN; else process.env.GOOGLE_CALENDAR_REFRESH_TOKEN = originalRefresh;
@@ -275,67 +269,3 @@ test("reschedule and cancellation notify Calendar attendees", async () => {
   assert.ok(calls.some((call) => call.init?.method === "DELETE" && call.url.includes("sendUpdates=all")));
 });
 
-test("HubSpot company mapping requires one exact account and matching CASH account ID", async () => {
-  process.env.HUBSPOT_ACCESS_TOKEN = "test-token";
-  const goodFetch = (async () => Response.json({ results: [{
-    id: "56996862100",
-    properties: {
-      account_id: "100000",
-      name: "GTI",
-      shiphero_cash__account_url: "https://cash.shiphero.com/client/100000/",
-      timezone: "America/New_York",
-    },
-  }] })) as typeof fetch;
-  assert.deepEqual(
-    await findVerifiedCompany("100000", "https://cash.shiphero.com/client/100000", goodFetch),
-    { id: "56996862100", name: "GTI", timeZone: "America/New_York" },
-  );
-
-  const duplicateFetch = (async () => Response.json({ results: [{ id: "1" }, { id: "2" }] })) as typeof fetch;
-  await assert.rejects(
-    findVerifiedCompany("100000", "https://cash.shiphero.com/client/100000", duplicateFetch),
-    /exactly one/,
-  );
-});
-
-test("HubSpot meeting uses the requested warehouse time for six hours and company association 188", async () => {
-  process.env.HUBSPOT_ACCESS_TOKEN = "test-token";
-  const calls: Array<{ url: string; init?: RequestInit }> = [];
-  const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = String(input);
-    calls.push({ url, init });
-    if (url.endsWith("/search")) return Response.json({ results: [] });
-    return Response.json({ id: "meeting-123" });
-  }) as typeof fetch;
-
-  assert.deepEqual(meetingTimes("2026-10-05", "America/New_York"), {
-    start: "2026-10-05T13:00:00.000Z",
-    end: "2026-10-05T19:00:00.000Z",
-  });
-  assert.deepEqual(meetingTimes("2026-10-05", "America/Los_Angeles"), {
-    start: "2026-10-05T16:00:00.000Z",
-    end: "2026-10-05T22:00:00.000Z",
-  });
-  assert.deepEqual(meetingTimes("2026-10-05", "America/New_York", "08:30"), {
-    start: "2026-10-05T12:30:00.000Z",
-    end: "2026-10-05T18:30:00.000Z",
-  });
-  const id = await createOrGetHubSpotMeeting(
-    request,
-    { id: "56996862100", name: "GTI", timeZone: "America/New_York" },
-    "https://calendar.google.com/calendar/event?eid=safe",
-    fakeFetch,
-  );
-  assert.equal(id, "meeting-123");
-  const createCall = calls.find((call) => call.url.endsWith("/crm/v3/objects/meetings"));
-  const payload = JSON.parse(String(createCall?.init?.body));
-  assert.equal(payload.properties.hs_timestamp, "2026-10-05T12:30:00.000Z");
-  assert.equal(payload.properties.hs_meeting_start_time, "2026-10-05T12:30:00.000Z");
-  assert.equal(payload.properties.hs_meeting_end_time, "2026-10-05T18:30:00.000Z");
-  assert.match(payload.properties.hs_meeting_body, /Readiness: 12 of 12/);
-  assert.match(payload.properties.hs_meeting_body, /Jamie Customer/);
-  assert.equal(payload.properties.hs_meeting_outcome, "SCHEDULED");
-  assert.equal(payload.properties.hs_activity_type, "On-Site");
-  assert.equal(payload.associations[0].types[0].associationTypeId, 188);
-  assert.equal(payload.associations[0].to.id, "56996862100");
-});

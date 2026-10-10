@@ -3,6 +3,7 @@ import { INITIAL_ADMIN_EMAIL } from "@/lib/admin-policy";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
+const GMAIL_PROFILE_API = "https://gmail.googleapis.com/gmail/v1/users/me/profile";
 type Fetch = typeof fetch;
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
@@ -16,7 +17,7 @@ export function emailNotificationsConfigured() {
 }
 
 function appOrigin() {
-  return (process.env.APP_ORIGIN ?? "https://cs-onsite-travel.vercel.app").replace(/\/$/, "");
+  return (process.env.APP_ORIGIN ?? "https://central-ops-travel-hub.vercel.app").replace(/\/$/, "");
 }
 
 function cleanHeader(value: string) {
@@ -53,6 +54,21 @@ async function accessToken(fetchImpl: Fetch) {
   if (!result.access_token) throw new Error("Email token refresh returned no access token");
   cachedToken = { value: result.access_token, expiresAt: Date.now() + Math.max(60, result.expires_in ?? 3600) * 1000 };
   return result.access_token;
+}
+
+export async function verifyEmailNotificationConnection(fetchImpl: Fetch = fetch) {
+  if (!emailNotificationsConfigured()) throw new Error("EMAIL_NOT_CONFIGURED");
+  const token = await accessToken(fetchImpl);
+  const response = await fetchImpl(GMAIL_PROFILE_API, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Gmail sender verification failed with HTTP ${response.status}`);
+  const result = (await response.json()) as { emailAddress?: string };
+  const email = result.emailAddress?.trim().toLowerCase() ?? "";
+  if (!/^[^\s@]+@shiphero\.com$/.test(email)) throw new Error("Gmail sender must use a ShipHero email address");
+  return email;
 }
 
 export async function sendNotificationEmail(
@@ -159,4 +175,8 @@ export function notifyVisitUpdated(
     `An administrator ${action} this visit.\n\n${requestDetails(request)}\n\nView requests: ${appOrigin()}/?view=submit`,
     fetchImpl,
   );
+}
+
+export function clearEmailTokenCacheForTests() {
+  cachedToken = null;
 }

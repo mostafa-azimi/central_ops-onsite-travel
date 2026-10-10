@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEmployeeSession } from "@/lib/admin-auth";
 import { updateCalendarAttendance } from "@/lib/google-calendar";
-import { completeVisitLifecycleHubSpot, databaseConfigured, recordParticipantChange } from "@/lib/db";
-import { hubSpotConfigured, updateHubSpotMeetingParticipants } from "@/lib/hubspot";
+import { databaseConfigured, recordParticipantChange } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -17,16 +16,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const result = await updateCalendarAttendance(id, employee.email, body.action);
     if (result?.requestId && databaseConfigured()) {
-      const saved = await recordParticipantChange(result.requestId, result.participants, employee.email);
-      if (saved?.hubspotMeetingId && hubSpotConfigured()) {
-        await updateHubSpotMeetingParticipants(saved.hubspotMeetingId, result.participants);
-        await completeVisitLifecycleHubSpot(saved.id, employee.email);
-      }
+      await recordParticipantChange(result.requestId, result.participants, employee.email);
     }
     return NextResponse.json({
       message: body.action === "join"
-        ? "You were added to the Calendar invite. HubSpot participants will sync when connected."
-        : "You left the Calendar invite. HubSpot participants will sync when connected.",
+        ? "You were added to the Calendar invite."
+        : "You left the Calendar invite.",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Calendar attendance could not be updated.";

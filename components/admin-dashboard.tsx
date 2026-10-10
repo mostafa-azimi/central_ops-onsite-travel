@@ -160,7 +160,6 @@ export function AdminDashboard({ initialRequests }: { initialRequests: StoredVis
             <div><h3>{request.accountName || "Account name needed"}</h3><p>{request.tripType} · {request.city}, {request.state} · {request.start} to {request.end}</p><div className="request-badges"><span className={`confidence confidence-${request.dateConfidence}`}>{request.dateConfidence} confidence</span><span className="field-note">Requested by {request.requesterName || request.requesterEmail || "legacy request"}</span></div>{request.tripType === "Onboarding" && <ReadinessReview request={request} />}<a href={request.cashUrl} target="_blank" rel="noreferrer">CASH account {request.cashAccountId}</a></div>
             <div className="approval-actions">
               {request.calendarEventUrl && <a href={request.calendarEventUrl} target="_blank" rel="noreferrer">View Calendar event</a>}
-              {request.syncStatus === "awaiting_hubspot" && <span className="duration">HubSpot pending</span>}
               {!request.accountName && <input aria-label={`Account name for ${request.id}`} id={`account-${request.id}`} maxLength={120} placeholder="Account name" />}
               <select aria-label={`Traveler for ${request.id}`} value={selectedTraveler} onChange={(event) => setTravelerSelections((current) => ({ ...current, [request.id]: event.target.value }))} disabled={workingId === request.id}>
                 <option value="" disabled>Assign traveler</option>
@@ -191,8 +190,7 @@ export function AdminDashboard({ initialRequests }: { initialRequests: StoredVis
               <div className="form-actions full"><button className="btn-primary" type="submit" disabled={workingId === request.id}>Save reschedule</button><span>Calendar attendees will receive an update.</span></div>
             </form></details>
             <div className="scheduled-actions">
-              {request.syncStatus === "awaiting_hubspot" && <span className="duration">HubSpot pending</span>}
-              {request.status === "pending" && <button className="filter" type="button" onClick={() => void decide(request.id, "approve", request.assignedTraveler ?? undefined)}>Retry HubSpot</button>}
+              {request.status === "pending" && <button className="filter" type="button" onClick={() => void decide(request.id, "approve", request.assignedTraveler ?? undefined)}>Finish approval</button>}
               <button className="danger-button" type="button" disabled={workingId === request.id} onClick={() => void cancel(request.id)}>{confirmCancelId === request.id ? "Confirm cancellation" : "Cancel visit"}</button>
             </div>
           </article>

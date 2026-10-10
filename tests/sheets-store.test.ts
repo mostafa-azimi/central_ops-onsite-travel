@@ -160,7 +160,7 @@ test("requester date changes remain pending until an approver applies them", asy
   const store = fakeStore();
   await createVisitRequest(request, store.fakeFetch);
   await claimVisitRequestApproval(request.submissionId, "Sam Armenia", store.fakeFetch);
-  await saveCalendarResult(request.submissionId, "calendar-event", "https://calendar.google.com/event", null, store.fakeFetch);
+  await saveCalendarResult(request.submissionId, "calendar-event", "https://calendar.google.com/event", store.fakeFetch);
 
   assert.equal(await requestVisitChange(
     request.submissionId,

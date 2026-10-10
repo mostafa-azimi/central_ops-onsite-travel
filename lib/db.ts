@@ -13,8 +13,8 @@ type Fetch = typeof fetch;
 export const REQUEST_HEADERS = [
   "id", "created_at", "updated_at", "status", "trip_type", "cash_url", "cash_account_id",
   "city", "state", "start_date", "end_date_inclusive", "assigned_traveler", "decided_at",
-  "decided_by_email", "calendar_event_id", "calendar_event_url", "hubspot_meeting_id",
-  "hubspot_company_id", "sync_status", "sync_started_at", "sync_attempts", "sync_error",
+  "decided_by_email", "calendar_event_id", "calendar_event_url", "reserved_external_id_1",
+  "reserved_external_id_2", "sync_status", "sync_started_at", "sync_attempts", "sync_error",
   "payload_fingerprint", "claim_token", "account_name",
   "full_address", "country_code", "latitude", "longitude", "place_id",
   "lifecycle_action", "lifecycle_version", "participants_snapshot",
@@ -37,10 +37,8 @@ export type StoredVisitRequest = Omit<VisitRequestSubmission, "readiness"> & {
   decidedAt: string | null;
   decidedByEmail: string | null;
   calendarEventId: string | null;
-  hubspotMeetingId: string | null;
-  hubspotCompanyId: string | null;
   calendarEventUrl: string | null;
-  syncStatus: "not_started" | "syncing_calendar" | "awaiting_hubspot" | "syncing_hubspot" | "complete" | "failed";
+  syncStatus: "not_started" | "syncing_calendar" | "complete" | "failed";
   syncError: string | null;
   syncAttempts: number;
   lifecycleAction: "create" | "reschedule" | "cancel" | "participants";
@@ -172,7 +170,15 @@ function readinessFromCell(value: string): ReadinessAnswers | null {
   }
 }
 
+function normalizedSyncStatus(value: string, calendarEventId: string | null): StoredVisitRequest["syncStatus"] {
+  if (value === "not_started" || value === "syncing_calendar" || value === "complete" || value === "failed") {
+    return value;
+  }
+  return calendarEventId ? "complete" : "not_started";
+}
+
 export function storedRequestFromValues(values: string[]): StoredVisitRequest {
+  const calendarEventId = cell(values, 14) || null;
   return {
     id: cell(values, 0),
     submissionId: cell(values, 0),
@@ -195,11 +201,9 @@ export function storedRequestFromValues(values: string[]): StoredVisitRequest {
     assignedTraveler: cell(values, 11) || null,
     decidedAt: cell(values, 12) || null,
     decidedByEmail: cell(values, 13) || null,
-    calendarEventId: cell(values, 14) || null,
+    calendarEventId,
     calendarEventUrl: cell(values, 15) || null,
-    hubspotMeetingId: cell(values, 16) || null,
-    hubspotCompanyId: cell(values, 17) || null,
-    syncStatus: (cell(values, 18) || "not_started") as StoredVisitRequest["syncStatus"],
+    syncStatus: normalizedSyncStatus(cell(values, 18), calendarEventId),
     syncAttempts: Number(cell(values, 20) || 0),
     syncError: cell(values, 21) || null,
     lifecycleAction: (cell(values, 30) || "create") as StoredVisitRequest["lifecycleAction"],
@@ -465,7 +469,7 @@ export async function recordVisitReschedule(
   row.values[44] = input.postalCode;
   row.values[9] = input.start;
   row.values[10] = input.end;
-  row.values[18] = "awaiting_hubspot";
+  row.values[18] = "complete";
   row.values[21] = "";
   row.values[25] = input.fullAddress;
   row.values[26] = input.countryCode;
@@ -484,7 +488,6 @@ export async function recordVisitReschedule(
     start: input.start,
     end: input.end,
     fullAddress: input.fullAddress,
-    hubspotStatus: "pending",
   }, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
@@ -498,7 +501,7 @@ export async function recordVisitCancellation(id: string, actorEmail: string, fe
   row.values[3] = "cancelled";
   row.values[12] = now;
   row.values[13] = actorEmail;
-  row.values[18] = "awaiting_hubspot";
+  row.values[18] = "complete";
   row.values[21] = "";
   row.values[30] = "cancel";
   row.values[31] = String(row.request.lifecycleVersion + 1);
@@ -508,18 +511,7 @@ export async function recordVisitCancellation(id: string, actorEmail: string, fe
     row.values[43] = now;
   }
   await updateRow(row, fetchImpl);
-  await appendAudit(id, actorEmail, pendingChange ? "cancel_change_approved" : "cancelled", { hubspotStatus: "pending" }, fetchImpl);
-  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
-}
-
-export async function completeVisitLifecycleHubSpot(id: string, actorEmail: string, fetchImpl: Fetch = fetch) {
-  const row = await findCanonicalRow(id, fetchImpl);
-  if (!row) return null;
-  row.values[2] = new Date().toISOString();
-  row.values[18] = "complete";
-  row.values[21] = "";
-  await updateRow(row, fetchImpl);
-  await appendAudit(id, actorEmail, `${row.request.lifecycleAction}_hubspot_synced`, {}, fetchImpl);
+  await appendAudit(id, actorEmail, pendingChange ? "cancel_change_approved" : "cancelled", {}, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
@@ -532,12 +524,13 @@ export async function recordParticipantChange(
   const row = await findCanonicalRow(id, fetchImpl);
   if (!row || !row.request.calendarEventId || row.request.status === "cancelled") return null;
   row.values[2] = new Date().toISOString();
-  row.values[18] = row.request.hubspotMeetingId ? "awaiting_hubspot" : row.values[18];
+  row.values[18] = "complete";
+  row.values[21] = "";
   row.values[30] = "participants";
   row.values[31] = String(row.request.lifecycleVersion + 1);
   row.values[32] = JSON.stringify([...new Set(participants)].slice(0, 100));
   await updateRow(row, fetchImpl);
-  await appendAudit(id, actorEmail, "participants_changed", { participants, hubspotStatus: "pending" }, fetchImpl);
+  await appendAudit(id, actorEmail, "participants_changed", { participants }, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
@@ -546,13 +539,13 @@ export async function claimVisitRequestApproval(id: string, traveler: string, fe
   if (!row || row.request.status !== "pending") return null;
   if (row.request.assignedTraveler && row.request.assignedTraveler !== traveler) return null;
   const stale = row.syncStartedAt && Date.now() - new Date(row.syncStartedAt).getTime() > 15 * 60 * 1000;
-  if (!["not_started", "awaiting_hubspot", "failed"].includes(row.request.syncStatus) && !stale) return null;
+  if (!["not_started", "complete", "failed"].includes(row.request.syncStatus) && !stale) return null;
 
   const now = new Date().toISOString();
   const claimToken = randomUUID();
   row.values[2] = now;
   row.values[11] = traveler;
-  row.values[18] = row.request.calendarEventId ? "syncing_hubspot" : "syncing_calendar";
+  row.values[18] = "syncing_calendar";
   row.values[19] = now;
   row.values[20] = String(row.request.syncAttempts + 1);
   row.values[21] = "";
@@ -566,7 +559,6 @@ export async function saveCalendarResult(
   id: string,
   eventId: string,
   eventUrl: string,
-  companyId: string | null,
   fetchImpl: Fetch = fetch,
 ) {
   const row = await findCanonicalRow(id, fetchImpl);
@@ -574,28 +566,8 @@ export async function saveCalendarResult(
   row.values[2] = new Date().toISOString();
   row.values[14] = eventId;
   row.values[15] = eventUrl;
-  if (companyId) row.values[17] = companyId;
-  row.values[18] = "syncing_hubspot";
+  row.values[18] = "syncing_calendar";
   await updateRow(row, fetchImpl);
-  return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
-}
-
-export async function markVisitRequestAwaitingHubSpot(
-  id: string,
-  actorEmail: string,
-  fetchImpl: Fetch = fetch,
-) {
-  const row = await findCanonicalRow(id, fetchImpl);
-  if (!row || row.request.status !== "pending" || !row.request.calendarEventId) return null;
-  row.values[2] = new Date().toISOString();
-  row.values[18] = "awaiting_hubspot";
-  row.values[19] = "";
-  row.values[21] = "";
-  row.values[23] = "";
-  await updateRow(row, fetchImpl);
-  await appendAudit(id, actorEmail, "calendar_scheduled", {
-    traveler: row.values[11], calendarEventId: row.values[14], hubspotStatus: "pending",
-  }, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }
 
@@ -613,7 +585,6 @@ export async function failVisitRequestApproval(id: string, error: string, fetchI
 export async function completeVisitRequestApproval(
   id: string,
   actorEmail: string,
-  hubspotMeetingId: string,
   fetchImpl: Fetch = fetch,
 ) {
   const row = await findCanonicalRow(id, fetchImpl);
@@ -623,14 +594,13 @@ export async function completeVisitRequestApproval(
   row.values[3] = "approved";
   row.values[12] = now;
   row.values[13] = actorEmail;
-  row.values[16] = hubspotMeetingId;
   row.values[18] = "complete";
   row.values[19] = "";
   row.values[21] = "";
   row.values[23] = "";
   await updateRow(row, fetchImpl);
   await appendAudit(id, actorEmail, "approved", {
-    traveler: row.values[11], calendarEventId: row.values[14], hubspotMeetingId,
+    traveler: row.values[11], calendarEventId: row.values[14],
   }, fetchImpl);
   return (await findCanonicalRow(id, fetchImpl))?.request ?? null;
 }

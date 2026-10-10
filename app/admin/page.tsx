@@ -3,7 +3,6 @@ import { adminAuthConfigured, getAdminSession, INITIAL_ADMIN_EMAIL } from "@/lib
 import { databaseConfigured, listVisitRequests } from "@/lib/db";
 import { AdminDashboard } from "@/components/admin-dashboard";
 import { googleCalendarConfigured } from "@/lib/google-calendar";
-import { hubSpotConfigured } from "@/lib/hubspot";
 import { ConnectorHealthPanel } from "@/components/connector-health-panel";
 import { googleSignInHref } from "@/lib/auth-links";
 
@@ -40,7 +39,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     return [];
   }) : [];
   const calendarReady = googleCalendarConfigured();
-  const hubSpotReady = hubSpotConfigured();
 
   return (
     <main className="admin-shell">
@@ -59,8 +57,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         {!hasDatabase && <div className="setup-note"><strong>Google Sheets storage pending</strong><span>Requests and approval actions remain unavailable until the private server-side Sheet is connected.</span></div>}
         {storageError && <div className="submit-status error" role="alert"><strong>Google Sheets is unavailable.</strong> Refresh after checking the connection below.</div>}
         {hasDatabase && (
-          <div className={`submit-status ${calendarReady && hubSpotReady ? "success" : "working"}`} role="status">
-            Calendar: {calendarReady ? "connected" : "pending"} · HubSpot: {hubSpotReady ? "connected" : "pending"}
+          <div className={`submit-status ${calendarReady ? "success" : "working"}`} role="status">
+            Calendar: {calendarReady ? "connected" : "pending"}
           </div>
         )}
         <p>Only {INITIAL_ADMIN_EMAIL} can approve, deny, assign a traveler, or directly schedule a visit.</p>

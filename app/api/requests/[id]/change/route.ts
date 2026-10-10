@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getEmployeeSession } from "@/lib/admin-auth";
 import { canApproveVisitChange } from "@/lib/change-policy";
 import {
-  completeVisitLifecycleHubSpot,
   databaseConfigured,
   denyVisitChange,
   getVisitRequest,
@@ -11,7 +10,6 @@ import {
   requestVisitChange,
 } from "@/lib/db";
 import { cancelCalendarEvent, rescheduleCalendarEvent } from "@/lib/google-calendar";
-import { findVerifiedCompany, hubSpotConfigured, updateHubSpotMeetingLifecycle } from "@/lib/hubspot";
 import { validateVisitChange } from "@/lib/submissions";
 import { INITIAL_ADMIN_EMAIL } from "@/lib/admin-policy";
 import { TRAVELER_EMAILS, type Assignee } from "@/lib/types";
@@ -84,12 +82,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     updated = await recordVisitReschedule(id, { ...current, start, end }, employee.email);
   }
   if (!updated) return NextResponse.json({ message: "The change could not be recorded." }, { status: 409 });
-
-  if (hubSpotConfigured() && updated.hubspotMeetingId) {
-    const company = await findVerifiedCompany(updated.cashAccountId, updated.cashUrl);
-    await updateHubSpotMeetingLifecycle(updated, company, updated.lifecycleAction === "cancel" ? "cancel" : "reschedule");
-    updated = await completeVisitLifecycleHubSpot(id, employee.email) ?? updated;
-  }
 
   await notifyChangeDecision(updated, "approved");
 

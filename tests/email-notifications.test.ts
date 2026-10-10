@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sendNotificationEmail } from "@/lib/email-notifications";
+import {
+  clearEmailTokenCacheForTests,
+  sendNotificationEmail,
+  verifyEmailNotificationConnection,
+} from "@/lib/email-notifications";
 
 test("Gmail notifications use a narrow token exchange and ShipHero recipients", async () => {
   process.env.GOOGLE_EMAIL_CLIENT_ID = "email-client";
   process.env.GOOGLE_EMAIL_CLIENT_SECRET = "email-secret";
   process.env.GOOGLE_EMAIL_REFRESH_TOKEN = "email-refresh";
+  clearEmailTokenCacheForTests();
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
@@ -29,6 +34,25 @@ test("Gmail notifications use a narrow token exchange and ShipHero recipients", 
   assert.match(message, /^To: mike\.azimi@shiphero\.com/m);
   assert.match(message, /^Subject: Travel request/m);
   assert.match(message, /A request needs review\./);
+});
+
+test("Gmail sender verification confirms a ShipHero account without sending email", async () => {
+  process.env.GOOGLE_EMAIL_CLIENT_ID = "email-client";
+  process.env.GOOGLE_EMAIL_CLIENT_SECRET = "email-secret";
+  process.env.GOOGLE_EMAIL_REFRESH_TOKEN = "email-refresh";
+  clearEmailTokenCacheForTests();
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.includes("oauth2.googleapis.com")) return Response.json({ access_token: "access", expires_in: 3600 });
+    return Response.json({ emailAddress: "mike.azimi@shiphero.com" });
+  }) as typeof fetch;
+
+  assert.equal(await verifyEmailNotificationConnection(fakeFetch), "mike.azimi@shiphero.com");
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].url, /gmail\/v1\/users\/me\/profile/);
+  assert.equal(calls[1].init?.method, "GET");
 });
 
 test("email notifications reject non-ShipHero recipients", async () => {

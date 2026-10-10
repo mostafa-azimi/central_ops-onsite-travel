@@ -1,6 +1,6 @@
 import { adminAuthConfigured } from "@/lib/admin-auth";
 import { databaseConfigured, verifyDatabaseConnection } from "@/lib/db";
-import { emailNotificationsConfigured } from "@/lib/email-notifications";
+import { emailNotificationsConfigured, verifyEmailNotificationConnection } from "@/lib/email-notifications";
 import { fetchGoogleTravelEvents, googleCalendarConfigured } from "@/lib/google-calendar";
 
 export type ConnectorState = "connected" | "pending" | "error";
@@ -24,9 +24,27 @@ async function timedCheck(name: ConnectorHealth["name"], configured: boolean, ch
 }
 
 export async function checkConnectorHealth(): Promise<{ checkedAt: string; connectors: ConnectorHealth[] }> {
-  const [sheets, calendar] = await Promise.all([
+  const [sheets, calendar, email] = await Promise.all([
     timedCheck("Google Sheets", databaseConfigured(), () => verifyDatabaseConnection()),
     timedCheck("Google Calendar", googleCalendarConfigured(), () => fetchGoogleTravelEvents(new Date())),
+    (async (): Promise<ConnectorHealth> => {
+      if (!emailNotificationsConfigured()) {
+        return { name: "Email notifications", state: "pending", detail: "Gmail sender authorization required" };
+      }
+      try {
+        const sender = await Promise.race([
+          verifyEmailNotificationConnection(),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Health check timed out")), 8_000)),
+        ]);
+        return { name: "Email notifications", state: "connected", detail: `Verified sender: ${sender}` };
+      } catch (error) {
+        return {
+          name: "Email notifications",
+          state: "error",
+          detail: error instanceof Error ? error.message : "Connection failed",
+        };
+      }
+    })(),
   ]);
   return {
     checkedAt: new Date().toISOString(),
@@ -34,11 +52,7 @@ export async function checkConnectorHealth(): Promise<{ checkedAt: string; conne
       { name: "Google sign-in", state: adminAuthConfigured() ? "connected" : "pending", detail: adminAuthConfigured() ? "Configured" : "Not configured" },
       sheets,
       calendar,
-      {
-        name: "Email notifications",
-        state: emailNotificationsConfigured() ? "connected" : "pending",
-        detail: emailNotificationsConfigured() ? "Configured, send verification recommended" : "Awaiting approved Gmail sender",
-      },
+      email,
     ],
   };
 }
