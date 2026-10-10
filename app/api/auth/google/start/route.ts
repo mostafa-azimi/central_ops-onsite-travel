@@ -5,6 +5,12 @@ import { adminAuthConfigured, appOrigin } from "@/lib/admin-auth";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  const requestUrl = new URL(request.url);
+  const canonicalOrigin = appOrigin(request);
+  if (requestUrl.origin !== canonicalOrigin) {
+    return NextResponse.redirect(new URL(`${requestUrl.pathname}${requestUrl.search}`, canonicalOrigin));
+  }
+
   const clientId = process.env.GOOGLE_OIDC_CLIENT_ID;
   if (!adminAuthConfigured() || !clientId) {
     return NextResponse.json({ message: "Google administrator sign-in is not configured." }, { status: 503 });
@@ -13,8 +19,8 @@ export async function GET(request: Request) {
   const state = randomBytes(32).toString("base64url");
   const verifier = randomBytes(48).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
-  const redirectUri = `${appOrigin(request)}/api/auth/google/callback`;
-  const requestedReturnTo = new URL(request.url).searchParams.get("returnTo");
+  const redirectUri = `${canonicalOrigin}/api/auth/google/callback`;
+  const requestedReturnTo = requestUrl.searchParams.get("returnTo");
   const returnTo = ["/", "/?view=submit", "/map", "/calendar", "/admin", "/admin/settings", "/admin/operations"].includes(requestedReturnTo ?? "")
     ? requestedReturnTo!
     : "/admin";
