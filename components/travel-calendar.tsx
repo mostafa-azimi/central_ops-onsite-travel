@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ShipHeroBrand } from "@/components/shiphero-brand";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { EmployeeSession } from "@/lib/admin-auth";
 import { addDays, calendarEventDayKeys, dateKey, eventsByDay, monthGrid, startOfWeek, weekGrid } from "@/lib/calendar-view";
@@ -134,7 +135,8 @@ export function TravelCalendar({
     <main className="calendar-shell">
       <header className="map-header calendar-header">
         <div>
-          <p className="eyebrow">ShipHero employee view</p>
+          <ShipHeroBrand className="map-brand" />
+          <p className="eyebrow">Employee travel view</p>
           <h1>Calendar view</h1>
           <p>Explore approved visits by date, traveler, and customer.</p>
         </div>

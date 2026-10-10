@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { ShipHeroBrand } from "@/components/shiphero-brand";
 import type { EmployeeSession } from "@/lib/admin-auth";
 import { postalCodeFromLocation, type AddressSuggestion, type PostalLookup } from "@/lib/geocoding";
 import type { EmployeeTravelEvent, TravelerProfile } from "@/lib/types";
@@ -139,7 +140,7 @@ export function TravelMap({
   return (
     <main className="map-shell">
       <header className="map-header">
-        <div><p className="eyebrow">ShipHero employee view</p><h1>Map view</h1><p>See active visits, who is going, and add yourself to the Calendar invite.</p></div>
+        <div><ShipHeroBrand className="map-brand" /><p className="eyebrow">Employee travel view</p><h1>Map view</h1><p>See active visits, who is going, and add yourself to the Calendar invite.</p></div>
         <div className="map-account"><span>{employee.name}</span><form action="/api/auth/signout" method="post"><button className="filter" type="submit">Sign out</button></form></div>
       </header>
       <nav className="view-tabs map-workspace-nav" aria-label="Travel workspace">

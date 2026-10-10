@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ShipHeroBrand } from "@/components/shiphero-brand";
 
 export const metadata: Metadata = {
   title: "How to use Central Ops Travel",
@@ -55,7 +56,7 @@ export default function HowToUsePage() {
     <main className="guide-shell">
       <header className="guide-hero">
         <nav className="guide-nav" aria-label="Travel workspace">
-          <Link className="guide-brand" href="/">Central Ops Travel</Link>
+          <ShipHeroBrand surface="dark" className="guide-brand" />
           <div>
             <Link href="/">Upcoming travel</Link>
             <Link href="/?view=submit">Requests</Link>

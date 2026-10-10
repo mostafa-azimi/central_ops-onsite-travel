@@ -6,6 +6,7 @@ import { isAllowedAdminEmail } from "@/lib/admin-policy";
 import { TravelCalendar } from "@/components/travel-calendar";
 import type { EmployeeTravelEvent } from "@/lib/types";
 import { listActiveTravelers } from "@/lib/db";
+import { ShipHeroBrand } from "@/components/shiphero-brand";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     return (
       <main className="admin-shell">
         <section className="admin-card">
-          <p className="eyebrow">ShipHero employees</p>
+          <ShipHeroBrand className="admin-brand" />
+          <p className="eyebrow">Employee access</p>
           <h1>Calendar view</h1>
           <p>Sign in with a verified @shiphero.com Google account to explore visits and join a customer onsite.</p>
           {error && <div className="submit-status error">Use a verified @shiphero.com Google account.</div>}

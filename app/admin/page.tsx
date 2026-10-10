@@ -5,6 +5,7 @@ import { AdminDashboard } from "@/components/admin-dashboard";
 import { googleCalendarConfigured } from "@/lib/google-calendar";
 import { ConnectorHealthPanel } from "@/components/connector-health-panel";
 import { googleSignInHref } from "@/lib/auth-links";
+import { ShipHeroBrand } from "@/components/shiphero-brand";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     return (
       <main className="admin-shell">
         <section className="admin-card">
+          <ShipHeroBrand className="admin-brand" />
           <p className="eyebrow">Central Ops Travel</p>
           <h1>Travel approvals</h1>
           <p>Sign in with an authorized administrator account to review requests, assign travelers, and schedule visits.</p>
@@ -43,6 +45,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   return (
     <main className="admin-shell">
       <section className="admin-card wide-admin">
+        <ShipHeroBrand className="admin-brand" />
         <nav className="view-tabs" aria-label="Travel workspace">
           <Link href="/?view=submit">Requests</Link>
           <Link href="/map">Map view</Link>

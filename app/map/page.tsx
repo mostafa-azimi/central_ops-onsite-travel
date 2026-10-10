@@ -5,6 +5,7 @@ import { TravelMap } from "@/components/travel-map";
 import { isAllowedAdminEmail } from "@/lib/admin-policy";
 import { googleSignInHref } from "@/lib/auth-links";
 import { listActiveTravelers } from "@/lib/db";
+import { ShipHeroBrand } from "@/components/shiphero-brand";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,8 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
     return (
       <main className="admin-shell">
         <section className="admin-card">
-          <p className="eyebrow">ShipHero employees</p>
+          <ShipHeroBrand className="admin-brand" />
+          <p className="eyebrow">Employee access</p>
           <h1>Map view</h1>
           <p>Sign in with a verified @shiphero.com Google account to view traveler names and join a customer visit.</p>
           {error && <div className="submit-status error">Use a verified @shiphero.com Google account.</div>}

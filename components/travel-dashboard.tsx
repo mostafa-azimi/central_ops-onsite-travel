@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { ShipHeroBrand } from "@/components/shiphero-brand";
 import type { Assignee, TravelFeed, TravelerProfile } from "@/lib/types";
 import { AddressFields } from "@/components/address-fields";
 import { ReadinessFields } from "@/components/readiness-fields";
@@ -214,7 +215,8 @@ export function TravelDashboard({
       <header className="hero">
         <div className="hero-inner hero-layout">
           <div>
-            <p className="eyebrow">ShipHero Central Ops</p>
+            <ShipHeroBrand surface="dark" className="hero-brand" />
+            <p className="eyebrow">Central Ops team</p>
             <h1><Link className="home-title" href="/" onClick={() => setView("schedule")}>Central Ops Travel</Link></h1>
             <p className="hero-copy">Plan customer visits and keep the team aligned.</p>
           </div>
