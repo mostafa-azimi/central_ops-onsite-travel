@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertAdministratorContinuity, dedupeManagedPeople, validateManagedPerson } from "@/lib/db";
-import type { ManagedPerson } from "@/lib/types";
+import { assertAdministratorContinuity, assertTravelerColorAvailable, dedupeManagedPeople, validateManagedPerson } from "@/lib/db";
+import { TRAVELER_COLOR_OPTIONS, type ManagedPerson } from "@/lib/types";
 
 test("people directory requires an exact ShipHero email, full name, role, and approved color", () => {
   const person = validateManagedPerson({
@@ -53,4 +53,23 @@ test("the people directory returns one current record per exact email", () => {
     updatedByEmail: "mike.azimi@shiphero.com",
   };
   assert.deepEqual(dedupeManagedPeople([original, updated]), [updated]);
+});
+
+test("the directory exposes 15 approved colors and reserves each active traveler color", () => {
+  assert.equal(TRAVELER_COLOR_OPTIONS.length, 15);
+  assert.equal(new Set(TRAVELER_COLOR_OPTIONS.map(({ value }) => value)).size, 15);
+  const existing = {
+    email: "mike.azimi@shiphero.com",
+    name: "Mike Azimi",
+    isTraveler: true,
+    isAdmin: true,
+    color: "#9f1d20",
+    active: true,
+    createdAt: "",
+    updatedAt: "",
+    updatedByEmail: "",
+  } satisfies ManagedPerson;
+  assert.throws(() => assertTravelerColorAvailable({ ...existing, email: "new.traveler@shiphero.com" }, [existing]), /TRAVELER_COLOR_IN_USE/);
+  assert.doesNotThrow(() => assertTravelerColorAvailable(existing, [existing]));
+  assert.doesNotThrow(() => assertTravelerColorAvailable({ ...existing, email: "new.admin@shiphero.com", isTraveler: false }, [existing]));
 });

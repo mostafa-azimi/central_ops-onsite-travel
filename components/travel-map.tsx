@@ -23,6 +23,20 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character] ?? character);
 }
 
+function markerInitials(name: string) {
+  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
+}
+
+function markerTextColor(color: string) {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) return "#ffffff";
+  const value = Number.parseInt(match[1], 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return (red * 299 + green * 587 + blue * 114) / 1000 > 150 ? "#000000" : "#ffffff";
+}
+
 async function eventCoordinate(event: EmployeeTravelEvent): Promise<Coordinate | null> {
   if (event.latitude != null && event.longitude != null) return { lat: event.latitude, lng: event.longitude };
   if (!event.location) return null;
@@ -72,12 +86,13 @@ export function TravelMap({
       const bounds = L.latLngBounds([]);
       for (const { event, position } of points) {
         if (!position) continue;
+        const color = travelerColor(event.assignee, travelers);
         const joiningLine = event.participants.length > 0
           ? `<br><span>Joining: ${escapeHtml(event.participants.join(", "))}</span>`
           : "";
         const marker = L.marker([position.lat, position.lng], {
           title: `${event.customer}: ${[event.assignee, ...event.participants].join(", ")}`,
-          icon: L.divIcon({ className: "travel-pin", html: `<span aria-hidden="true" style="background:${travelerColor(event.assignee, travelers)}"></span>`, iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -32] }),
+          icon: L.divIcon({ className: "travel-pin", html: `<span aria-hidden="true" style="background:${color};color:${markerTextColor(color)}"><b>${escapeHtml(markerInitials(event.assignee))}</b></span>`, iconSize: [28, 36], iconAnchor: [14, 36], popupAnchor: [0, -32] }),
         }).addTo(map);
         marker.bindPopup(`<div class="map-popup"><strong>${escapeHtml(event.customer)}</strong><br>${escapeHtml(event.location)}<br><span>Dates: ${escapeHtml(dateRange(event))}</span><br><span>Traveler: ${escapeHtml(event.assignee)}</span>${joiningLine}</div>`);
         bounds.extend([position.lat, position.lng]);

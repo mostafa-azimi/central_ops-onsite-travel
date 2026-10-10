@@ -11,6 +11,7 @@ function errorResponse(error: unknown) {
     VALID_DISPLAY_NAME_REQUIRED: ["Enter the employee's full display name.", 400],
     PERSON_ROLE_REQUIRED: ["Select traveler, administrator, or both.", 400],
     INVALID_PERSON_COLOR: ["Select one of the approved map colors.", 400],
+    TRAVELER_COLOR_IN_USE: ["That map color is already assigned to another active traveler.", 409],
     LAST_ADMIN_REQUIRED: ["At least one active administrator is required.", 409],
   };
   const [message, status] = messages[code] ?? ["The people directory could not be updated.", 500];

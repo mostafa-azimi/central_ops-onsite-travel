@@ -14,6 +14,24 @@ export const TRAVELER_EMAILS: Record<Assignee, string> = {
   "Sam Armenia": "samuel.armenia@shiphero.com",
 };
 
+export const TRAVELER_COLOR_OPTIONS = [
+  { label: "Hero blue", value: "#3281fd" },
+  { label: "Blood red", value: "#9f1d20" },
+  { label: "Golden orange", value: "#d89116" },
+  { label: "Emerald", value: "#32b76c" },
+  { label: "Teal", value: "#008c95" },
+  { label: "Brand red", value: "#ef5252" },
+  { label: "Deep blue", value: "#1b5eaa" },
+  { label: "Navy", value: "#263444" },
+  { label: "Magenta", value: "#c13c9a" },
+  { label: "Yellow", value: "#ffe119" },
+  { label: "Walnut", value: "#8c5a2b" },
+  { label: "Lime", value: "#6f9f18" },
+  { label: "Steel", value: "#8392a7" },
+  { label: "Onyx", value: "#000000" },
+  { label: "Cyan", value: "#00b8d9" },
+] as const;
+
 export const DEFAULT_TRAVELER_COLORS: Record<string, string> = {
   "Chris Haun": "#3281fd",
   "Mike Azimi": "#9f1d20",

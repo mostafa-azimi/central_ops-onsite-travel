@@ -116,6 +116,10 @@ test("administrator can manage traveler and administrator access", async ({ page
   });
   await page.goto("/admin/settings");
   await expect(page.getByRole("heading", { name: "Admin settings" })).toBeVisible();
+  const mapColor = page.getByLabel("Map color");
+  await expect(mapColor.locator("option")).toHaveCount(15);
+  await expect(mapColor).toHaveValue("#008c95");
+  await expect(mapColor.locator('option[value="#3281fd"]')).toHaveAttribute("disabled", "");
   await page.getByLabel("Full name").fill("Amanda Example");
   await page.getByLabel("ShipHero email").fill("amanda.example@shiphero.com");
   await page.getByRole("checkbox", { name: /Administrator/ }).check();

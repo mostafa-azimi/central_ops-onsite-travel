@@ -1,19 +1,19 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import type { ManagedPerson } from "@/lib/types";
+import { TRAVELER_COLOR_OPTIONS, type ManagedPerson } from "@/lib/types";
 
-const COLORS = [
-  ["Hero blue", "#3281fd"], ["Blood red", "#9f1d20"], ["Golden orange", "#d89116"],
-  ["Green", "#32b76c"], ["Violet", "#8a5cf6"], ["Teal", "#008c95"],
-  ["Brand red", "#ef5252"], ["Slate", "#6b7280"],
-] as const;
+type PersonForm = Pick<ManagedPerson, "email" | "name" | "isTraveler" | "isAdmin" | "color">;
 
-const EMPTY = { email: "", name: "", isTraveler: true, isAdmin: false, color: "#3281fd" };
+function emptyForm(people: ManagedPerson[]): PersonForm {
+  const used = new Set(people.filter((person) => person.active && person.isTraveler).map((person) => person.color));
+  const color = TRAVELER_COLOR_OPTIONS.find((option) => !used.has(option.value))?.value ?? TRAVELER_COLOR_OPTIONS[0].value;
+  return { email: "", name: "", isTraveler: true, isAdmin: false, color };
+}
 
 export function PeopleSettings({ initialPeople, currentEmail }: { initialPeople: ManagedPerson[]; currentEmail: string }) {
   const [people, setPeople] = useState(initialPeople);
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState<PersonForm>(() => emptyForm(initialPeople));
   const [editingEmail, setEditingEmail] = useState("");
   const [confirmRemove, setConfirmRemove] = useState("");
   const [working, setWorking] = useState(false);
@@ -26,9 +26,9 @@ export function PeopleSettings({ initialPeople, currentEmail }: { initialPeople:
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function reset() {
+  function reset(nextPeople = people) {
     setEditingEmail("");
-    setForm(EMPTY);
+    setForm(emptyForm(nextPeople));
     setConfirmRemove("");
   }
 
@@ -44,9 +44,11 @@ export function PeopleSettings({ initialPeople, currentEmail }: { initialPeople:
       });
       const result = (await response.json()) as { person?: ManagedPerson; message?: string };
       if (!response.ok || !result.person) throw new Error(result.message || "Access could not be saved.");
-      setPeople((items) => [...items.filter((person) => person.email !== result.person!.email), result.person!].sort((a, b) => a.name.localeCompare(b.name)));
-      setStatus({ kind: "success", message: `${result.person.name} was updated.` });
-      reset();
+      const savedPerson = result.person;
+      const nextPeople = [...people.filter((person) => person.email !== savedPerson.email), savedPerson].sort((a, b) => a.name.localeCompare(b.name));
+      setPeople(nextPeople);
+      setStatus({ kind: "success", message: `${savedPerson.name} was updated.` });
+      reset(nextPeople);
     } catch (error) {
       setStatus({ kind: "error", message: error instanceof Error ? error.message : "Access could not be saved." });
     } finally {
@@ -82,6 +84,7 @@ export function PeopleSettings({ initialPeople, currentEmail }: { initialPeople:
 
   const active = people.filter((person) => person.active);
   const inactive = people.filter((person) => !person.active);
+  const colorsInUse = new Set(people.filter((person) => person.active && person.isTraveler && person.email !== editingEmail).map((person) => person.color));
 
   return (
     <div className="people-settings">
@@ -89,7 +92,7 @@ export function PeopleSettings({ initialPeople, currentEmail }: { initialPeople:
       <section className="settings-panel" aria-labelledby="person-form-heading">
         <div className="settings-panel-heading">
           <div><p className="eyebrow">Access directory</p><h2 id="person-form-heading">{editingEmail ? "Edit person" : "Add person"}</h2></div>
-          {editingEmail && <button className="filter" type="button" onClick={reset}>Add someone else</button>}
+          {editingEmail && <button className="filter" type="button" onClick={() => reset()}>Add someone else</button>}
         </div>
         <form className="people-form" onSubmit={save}>
           <label><span>Full name</span><input required maxLength={80} autoComplete="name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Full employee name" /></label>
@@ -98,7 +101,10 @@ export function PeopleSettings({ initialPeople, currentEmail }: { initialPeople:
             <label><input type="checkbox" checked={form.isTraveler} onChange={(event) => setForm((current) => ({ ...current, isTraveler: event.target.checked }))} /><span><strong>Traveler</strong><small>Can be assigned to visits and shown in travel views.</small></span></label>
             <label><input type="checkbox" checked={form.isAdmin} onChange={(event) => setForm((current) => ({ ...current, isAdmin: event.target.checked }))} /><span><strong>Administrator</strong><small>Can approve visits and manage this directory.</small></span></label>
           </fieldset>
-          <label><span>Map color</span><select value={form.color} onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))}>{COLORS.map(([label, value]) => <option value={value} key={value}>{label}</option>)}</select></label>
+          <label><span>Map color</span><select value={form.color} onChange={(event) => setForm((current) => ({ ...current, color: event.target.value }))}>{TRAVELER_COLOR_OPTIONS.map(({ label, value }) => {
+            const unavailable = form.isTraveler && colorsInUse.has(value);
+            return <option value={value} key={value} disabled={unavailable}>{label}{unavailable ? " · in use" : ""}</option>;
+          })}</select></label>
           <div className="person-color-preview"><span style={{ backgroundColor: form.color }} aria-hidden="true" /><span>Traveler marker preview</span></div>
           <div className="form-actions full"><button className="btn-primary" disabled={working || (!form.isTraveler && !form.isAdmin)}>{working ? "Saving…" : editingEmail ? "Save changes" : "Add person"}</button><span>Every change is recorded in the private audit log.</span></div>
         </form>

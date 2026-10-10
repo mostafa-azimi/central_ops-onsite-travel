@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { normalizeAccountName, type ReadinessAnswers, type VisitRequestSubmission } from "@/lib/submissions";
-import { DEFAULT_PEOPLE, TRAVELER_EMAILS, type Assignee, type ManagedPerson, type TravelerProfile } from "@/lib/types";
+import { DEFAULT_PEOPLE, TRAVELER_COLOR_OPTIONS, TRAVELER_EMAILS, type Assignee, type ManagedPerson, type TravelerProfile } from "@/lib/types";
 
 const SHEETS_API = "https://sheets.googleapis.com/v4";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -34,7 +34,7 @@ export const PEOPLE_HEADERS = [
   "created_at", "updated_at", "updated_by_email",
 ] as const;
 
-const PEOPLE_COLORS = ["#3281fd", "#9f1d20", "#d89116", "#32b76c", "#8a5cf6", "#008c95", "#ef5252", "#6b7280"] as const;
+const PEOPLE_COLORS = TRAVELER_COLOR_OPTIONS.map(({ value }) => value);
 
 export type StoredVisitRequest = Omit<VisitRequestSubmission, "readiness"> & {
   readiness: ReadinessAnswers | null;
@@ -489,6 +489,17 @@ export function assertAdministratorContinuity(existing: ManagedPerson | null, ne
   }
 }
 
+export function assertTravelerColorAvailable(candidate: Pick<ManagedPerson, "email" | "color" | "isTraveler" | "active">, people: ManagedPerson[]) {
+  if (!candidate.active || !candidate.isTraveler) return;
+  const conflict = people.find((person) =>
+    person.active &&
+    person.isTraveler &&
+    person.email !== candidate.email &&
+    person.color === candidate.color,
+  );
+  if (conflict) throw new Error("TRAVELER_COLOR_IN_USE");
+}
+
 export async function saveManagedPerson(input: Partial<ManagedPerson>, actorEmail: string, fetchImpl: Fetch = fetch) {
   await ensurePeopleSchema(fetchImpl);
   const valid = validateManagedPerson(input);
@@ -496,6 +507,7 @@ export async function saveManagedPerson(input: Partial<ManagedPerson>, actorEmai
   const existing = rows.find((row) => row.person.email === valid.email);
   const activeAdmins = rows.filter((row) => row.person.active && row.person.isAdmin);
   assertAdministratorContinuity(existing?.person ?? null, valid.active && valid.isAdmin, activeAdmins.length);
+  assertTravelerColorAvailable(valid, dedupeManagedPeople(rows.map((row) => row.person)));
   const now = new Date().toISOString();
   const person: ManagedPerson = {
     ...valid,
