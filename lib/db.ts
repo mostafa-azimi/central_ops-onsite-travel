@@ -74,6 +74,7 @@ let cachedToken: { value: string; expiresAt: number } | null = null;
 let cachedPeople: { value: ManagedPerson[]; expiresAt: number } | null = null;
 let schemaEnsured = false;
 let peopleSchemaEnsured = false;
+let peopleSchemaPromise: Promise<void> | null = null;
 
 export function databaseConfigured() {
   return Boolean(
@@ -376,8 +377,7 @@ async function readPeopleRows(fetchImpl: Fetch = fetch) {
     .filter((row): row is { rowNumber: number; values: string[]; person: ManagedPerson } => Boolean(row.person));
 }
 
-async function ensurePeopleSchema(fetchImpl: Fetch = fetch) {
-  if (peopleSchemaEnsured) return;
+async function initializePeopleSchema(fetchImpl: Fetch = fetch) {
   const metadata = await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}?fields=sheets.properties.title`,
     { method: "GET" },
@@ -386,11 +386,16 @@ async function ensurePeopleSchema(fetchImpl: Fetch = fetch) {
   const body = (await metadata.json()) as { sheets?: Array<{ properties?: { title?: string } }> };
   const exists = body.sheets?.some((sheet) => sheet.properties?.title === PEOPLE_TAB) ?? false;
   if (!exists) {
-    await sheetsFetch(
-      `/spreadsheets/${encodeURIComponent(spreadsheetId())}:batchUpdate`,
-      { method: "POST", body: JSON.stringify({ requests: [{ addSheet: { properties: { title: PEOPLE_TAB, gridProperties: { frozenRowCount: 1, columnCount: PEOPLE_HEADERS.length } } } }] }) },
-      fetchImpl,
-    );
+    try {
+      await sheetsFetch(
+        `/spreadsheets/${encodeURIComponent(spreadsheetId())}:batchUpdate`,
+        { method: "POST", body: JSON.stringify({ requests: [{ addSheet: { properties: { title: PEOPLE_TAB, gridProperties: { frozenRowCount: 1, columnCount: PEOPLE_HEADERS.length } } } }] }) },
+        fetchImpl,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (!message.includes('A sheet with the name "People" already exists')) throw error;
+    }
   }
   const headerRange = `${PEOPLE_TAB}!A1:I1`;
   await sheetsFetch(
@@ -405,7 +410,16 @@ async function ensurePeopleSchema(fetchImpl: Fetch = fetch) {
       await appendValues(PEOPLE_TAB, personValues({ ...person, createdAt: now, updatedAt: now, updatedByEmail: "system" }), fetchImpl);
     }
   }
-  peopleSchemaEnsured = true;
+}
+
+async function ensurePeopleSchema(fetchImpl: Fetch = fetch) {
+  if (peopleSchemaEnsured) return;
+  if (!peopleSchemaPromise) {
+    peopleSchemaPromise = initializePeopleSchema(fetchImpl)
+      .then(() => { peopleSchemaEnsured = true; })
+      .finally(() => { peopleSchemaPromise = null; });
+  }
+  await peopleSchemaPromise;
 }
 
 export async function listPeopleDirectory(fetchImpl: Fetch = fetch) {
@@ -829,4 +843,5 @@ export function clearGoogleSheetsTokenCacheForTests() {
   cachedPeople = null;
   schemaEnsured = false;
   peopleSchemaEnsured = false;
+  peopleSchemaPromise = null;
 }
