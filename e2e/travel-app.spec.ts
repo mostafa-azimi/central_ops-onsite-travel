@@ -38,6 +38,26 @@ test("public schedule supports navigation, filtering, dark mode, and responsive 
   await page.screenshot({ path: testInfo.outputPath("public-schedule.png"), fullPage: true });
 });
 
+test("ShipHero branding and text remain visible when returning to light mode", async ({ page }, testInfo) => {
+  for (const path of ["/map", "/calendar", "/admin"]) {
+    await page.goto(path);
+    await page.evaluate(() => localStorage.setItem("central-ops-theme", "dark"));
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.getByRole("button", { name: "Use light mode" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+    const brand = page.locator(".shiphero-brand.surface-adaptive").first();
+    const visibleNavyLogo = brand.locator(".logo-navy:visible");
+    await expect(visibleNavyLogo).toHaveCount(1);
+    await expect(brand.locator(".logo-white:visible")).toHaveCount(0);
+    await expect(visibleNavyLogo.locator("path").first()).toHaveCSS("fill", "rgb(38, 52, 68)");
+    await expect(brand.locator(".shiphero-product-name")).toHaveCSS("color", "rgb(42, 71, 115)");
+    await expectAccessible(page);
+  }
+  await page.screenshot({ path: testInfo.outputPath("light-theme.png"), fullPage: true });
+});
+
 test("signed-out employee pages remain gated", async ({ page }) => {
   await page.goto("/map");
   await expect(page.getByRole("heading", { name: "Map view" })).toBeVisible();
