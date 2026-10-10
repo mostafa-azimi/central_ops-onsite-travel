@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ShipHeroBrand } from "@/components/shiphero-brand";
+import { getEmployeeSession } from "@/lib/admin-auth";
+import { isAllowedAdminEmail } from "@/lib/admin-policy";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "How to use Central Ops Travel",
@@ -49,9 +53,12 @@ const FAQS = [
   ["How do I join or shadow a trip?", "Sign in, open Map View or Calendar View, select the engagement, and choose Join and shadow. You will be added to the Calendar event as an attendee."],
   ["Can I cancel or reschedule a visit?", "Yes. The original requester can request a cancellation or new dates. The assigned traveler or an administrator must approve the change before the Calendar event is updated."],
   ["Will the right people receive Calendar updates?", "Yes. Approved assignments, shadowing requests, reschedules, and cancellations update the shared Calendar event and its attendees."],
+  ["How do I install the app on my phone?", "On iPhone, open the site in Safari, tap Share, then choose Add to Home Screen. On Android, open the site in Chrome and choose Install app or Add to Home screen."],
 ] as const;
 
-export default function HowToUsePage() {
+export default async function HowToUsePage() {
+  const employee = await getEmployeeSession();
+  const canAdminister = employee ? await isAllowedAdminEmail(employee.email) : false;
   return (
     <main className="guide-shell">
       <header className="guide-hero">
@@ -63,6 +70,7 @@ export default function HowToUsePage() {
             <Link href="/map">Map view</Link>
             <Link href="/calendar">Calendar view</Link>
             <Link className="active" href="/how-to-use" aria-current="page">How to use</Link>
+            {canAdminister && <><Link href="/admin">Approvals</Link><Link href="/admin/settings">Admin settings</Link><Link href="/admin/operations">Operations</Link></>}
           </div>
         </nav>
         <div className="guide-hero-grid">

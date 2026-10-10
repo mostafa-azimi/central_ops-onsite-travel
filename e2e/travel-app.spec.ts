@@ -68,6 +68,28 @@ test("signed-out employee pages remain gated", async ({ page }) => {
   await expectAccessible(page);
 });
 
+test("administrator navigation is visible only to signed-in administrators", async ({ page }) => {
+  const adminLinks = ["Approvals", "Admin settings", "Operations"];
+
+  await page.goto("/");
+  for (const name of adminLinks) await expect(page.getByRole("link", { name, exact: true })).toHaveCount(0);
+
+  await authenticate(page, "employee");
+  for (const path of ["/?view=submit", "/map", "/calendar", "/how-to-use"]) {
+    await page.goto(path);
+    for (const name of adminLinks) await expect(page.getByRole("link", { name, exact: true })).toHaveCount(0);
+  }
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Travel approvals" })).toBeVisible();
+  await expect(page.getByText("Sign in with an authorized administrator account")).toBeVisible();
+  for (const name of adminLinks) await expect(page.getByRole("link", { name, exact: true })).toHaveCount(0);
+
+  await page.context().clearCookies();
+  await authenticate(page, "admin");
+  await page.goto("/how-to-use");
+  for (const name of adminLinks) await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
+});
+
 test("verified employee can submit a request and receives a clean next-entry form", async ({ page }, testInfo) => {
   await authenticate(page, "employee");
   await page.route("**/api/postal?*", async (route) => {
@@ -123,6 +145,9 @@ test("administrator can open approvals and run non-mutating connection checks", 
   await page.getByRole("button", { name: "Check connections" }).click();
   await expect(page.getByRole("listitem").filter({ hasText: "Google sign-in" })).toBeVisible();
   await expect(page.getByRole("listitem").filter({ hasText: "Email notifications" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Approvals", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Admin settings", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Operations", exact: true })).toBeVisible();
   await expectAccessible(page);
   await page.screenshot({ path: testInfo.outputPath("admin-health.png"), fullPage: true });
 });

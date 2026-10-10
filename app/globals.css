@@ -151,6 +151,12 @@ h3 { font-size: 1.14rem; }
 .theme-toggle:hover { border-color: var(--sh-blue-300); }
 .theme-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 
+.pwa-actions { position: fixed; right: 20px; bottom: 20px; z-index: 1200; display: grid; gap: 8px; }
+.pwa-actions > button, .pwa-actions > div { border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); box-shadow: var(--shadow); }
+.pwa-actions > button, .pwa-actions button { min-height: 44px; padding: 9px 14px; border: 1px solid var(--sh-red-800); border-radius: 6px; background: var(--sh-red-800); color: #ffffff; cursor: pointer; font-weight: 800; }
+.pwa-actions > div { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; color: var(--text); }
+.pwa-actions span { font-size: .8rem; font-weight: 700; }
+
 .hero {
   position: relative;
   padding: 52px 24px 46px;
