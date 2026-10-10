@@ -41,6 +41,19 @@ export function postalLookupCode(countryCode: string, postalCode: string) {
   return countryCode === "CA" ? compact.slice(0, 3) : compact;
 }
 
+export function postalCodeFromLocation(location: string, countryCode: string) {
+  const normalizedCountry = normalizeCountryCode(countryCode);
+  const patterns: Record<string, RegExp> = {
+    US: /\b\d{5}(?:-\d{4})?\b/,
+    CA: /\b[A-Z]\d[A-Z][ -]?\d[A-Z]\d\b/i,
+    GB: /\b(?:GIR 0AA|[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2})\b/i,
+    AU: /\b\d{4}\b/,
+    MX: /\b\d{5}\b/,
+  };
+  const match = patterns[normalizedCountry]?.exec(location);
+  return match ? normalizePostalCode(match[0]) : "";
+}
+
 export function parsePostalResponse(input: unknown, expectedCountryCode: string): PostalLookup | null {
   if (!input || typeof input !== "object") return null;
   const record = input as Record<string, unknown>;

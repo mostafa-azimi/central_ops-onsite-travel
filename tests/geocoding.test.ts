@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeCountryCode, normalizePostalCode, parsePhotonResponse, parsePostalResponse, photonFeatureToSuggestion, postalLookupCode } from "@/lib/geocoding";
+import { normalizeCountryCode, normalizePostalCode, parsePhotonResponse, parsePostalResponse, photonFeatureToSuggestion, postalCodeFromLocation, postalLookupCode } from "@/lib/geocoding";
 
 test("country codes are normalized before Photon searches", () => {
   assert.equal(normalizeCountryCode(" us "), "US");
@@ -30,6 +30,13 @@ test("postal lookups normalize codes and return city and state", () => {
     latitude: 30.8635,
     longitude: -87.7644,
   });
+});
+
+test("map locations expose supported postal codes for coordinate fallback", () => {
+  assert.equal(postalCodeFromLocation("124 Venture Court Suite 1, 40511", "US"), "40511");
+  assert.equal(postalCodeFromLocation("1 King St W, Toronto, ON M5V 3A8", "CA"), "M5V 3A8");
+  assert.equal(postalCodeFromLocation("10 Downing Street, London SW1A 2AA", "GB"), "SW1A 2AA");
+  assert.equal(postalCodeFromLocation("North Charleston", "US"), "");
 });
 
 test("Photon results become minimal structured international addresses", () => {

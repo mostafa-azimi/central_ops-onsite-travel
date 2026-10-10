@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { EmployeeSession } from "@/lib/admin-auth";
-import type { AddressSuggestion } from "@/lib/geocoding";
+import { postalCodeFromLocation, type AddressSuggestion, type PostalLookup } from "@/lib/geocoding";
 import type { EmployeeTravelEvent, TravelerProfile } from "@/lib/types";
 import { travelerColor } from "@/lib/traveler-colors";
 
@@ -40,15 +40,31 @@ function markerTextColor(color: string) {
 async function eventCoordinate(event: EmployeeTravelEvent): Promise<Coordinate | null> {
   if (event.latitude != null && event.longitude != null) return { lat: event.latitude, lng: event.longitude };
   if (!event.location) return null;
+  const countryCode = event.countryCode || "US";
+  const postalCode = postalCodeFromLocation(event.location, countryCode);
+  let postalMatch: PostalLookup | null = null;
   try {
-    const response = await fetch(`/api/geocode?q=${encodeURIComponent(event.location)}&countryCode=${encodeURIComponent(event.countryCode || "US")}`);
-    if (!response.ok) return null;
-    const body = (await response.json()) as { suggestions?: AddressSuggestion[] };
-    const first = body.suggestions?.[0];
-    return first ? { lat: first.latitude, lng: first.longitude } : null;
+    if (postalCode) {
+      const postalResponse = await fetch(`/api/postal?postalCode=${encodeURIComponent(postalCode)}&countryCode=${encodeURIComponent(countryCode)}`);
+      if (postalResponse.ok) postalMatch = ((await postalResponse.json()) as { match?: PostalLookup | null }).match ?? null;
+    }
   } catch {
-    return null;
+    postalMatch = null;
   }
+  try {
+    const query = postalMatch
+      ? `${event.location}, ${postalMatch.city}, ${postalMatch.state}`
+      : event.location;
+    const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}&countryCode=${encodeURIComponent(countryCode)}`);
+    if (response.ok) {
+      const body = (await response.json()) as { suggestions?: AddressSuggestion[] };
+      const first = body.suggestions?.[0];
+      if (first) return { lat: first.latitude, lng: first.longitude };
+    }
+  } catch {}
+  return postalMatch?.latitude != null && postalMatch.longitude != null
+    ? { lat: postalMatch.latitude, lng: postalMatch.longitude }
+    : null;
 }
 
 export function TravelMap({
