@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertAdministratorContinuity, validateManagedPerson } from "@/lib/db";
+import { assertAdministratorContinuity, dedupeManagedPeople, validateManagedPerson } from "@/lib/db";
 import type { ManagedPerson } from "@/lib/types";
 
 test("people directory requires an exact ShipHero email, full name, role, and approved color", () => {
@@ -32,4 +32,25 @@ test("the final active administrator cannot be demoted or removed", () => {
   } satisfies ManagedPerson;
   assert.throws(() => assertAdministratorContinuity(admin, false, 1), /LAST_ADMIN_REQUIRED/);
   assert.doesNotThrow(() => assertAdministratorContinuity(admin, false, 2));
+});
+
+test("the people directory returns one current record per exact email", () => {
+  const original = {
+    email: "mike.azimi@shiphero.com",
+    name: "Mike Azimi",
+    isTraveler: true,
+    isAdmin: true,
+    color: "#9f1d20",
+    active: true,
+    createdAt: "2026-10-10T10:00:00.000Z",
+    updatedAt: "2026-10-10T10:00:00.000Z",
+    updatedByEmail: "system",
+  } satisfies ManagedPerson;
+  const updated = {
+    ...original,
+    color: "#3281fd",
+    updatedAt: "2026-10-10T11:00:00.000Z",
+    updatedByEmail: "mike.azimi@shiphero.com",
+  };
+  assert.deepEqual(dedupeManagedPeople([original, updated]), [updated]);
 });

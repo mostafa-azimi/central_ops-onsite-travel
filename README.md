@@ -84,4 +84,16 @@ docker run --rm -p 3000:3000 --env-file .env.local central-ops-travel-hub
 
 Railway automatically detects the root `Dockerfile`. Configure `/api/health` as the service healthcheck path. Copy the existing server-side Google Calendar, Google Sheets, Google OIDC, and optional email variables into the Railway service. Set `APP_ORIGIN` to the final HTTPS origin and add `${APP_ORIGIN}/api/auth/google/callback` to the Google web OAuth client's authorized redirect URIs before using sign-in. `NEXT_PUBLIC_SIGN_IN_ORIGIN` is an optional Docker build argument; leave it empty to use same-origin sign-in on Railway.
 
+### Railway cutover checklist
+
+1. Create one Railway service from the private GitHub repository and deploy `main`. Railway should detect the root `Dockerfile` automatically.
+2. Generate the Railway public domain. Set the service healthcheck path to `/api/health` and confirm it returns HTTP 200.
+3. Add every required variable listed in `.env.example` directly in Railway. Do not send credential values through Slack, email, tickets, or source control.
+4. Set `APP_ORIGIN` to the exact Railway HTTPS origin without a trailing slash. Leave `NEXT_PUBLIC_SIGN_IN_ORIGIN` blank.
+5. Add `${APP_ORIGIN}/api/auth/google/callback` to the existing `Central Ops Travel Admin` Google Web OAuth client.
+6. Redeploy after the variables and callback are configured. Sign in at `/admin`, run **Check connections**, and confirm Google sign-in, Sheets, Calendar, and email are green.
+7. Verify `/`, `/map`, `/calendar`, `/admin`, and `/admin/settings` before redirecting users away from Vercel.
+
+The app stores durable workflow data in its private Google Sheet, so Railway does not need a database or persistent volume. Keep Vercel active until the Railway connection check and employee sign-in both pass.
+
 Do not add a public Railway domain until the intended access boundary is confirmed. Railway private networking isolates services inside a Railway environment, but it does not by itself give employee browsers access. A company VPN path requires a separately approved ingress design, such as a Tailscale forwarder, or a public domain restricted to the company's VPN egress addresses with Railway edge rules.

@@ -364,6 +364,17 @@ function personValues(person: ManagedPerson) {
   ];
 }
 
+export function dedupeManagedPeople(people: ManagedPerson[]) {
+  const byEmail = new Map<string, ManagedPerson>();
+  for (const person of people) {
+    const existing = byEmail.get(person.email);
+    const timestamp = person.updatedAt || person.createdAt;
+    const existingTimestamp = existing?.updatedAt || existing?.createdAt || "";
+    if (!existing || timestamp >= existingTimestamp) byEmail.set(person.email, person);
+  }
+  return [...byEmail.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 async function readPeopleRows(fetchImpl: Fetch = fetch) {
   const range = encodeURIComponent(`${PEOPLE_TAB}!A2:I1001`);
   const response = await sheetsFetch(
@@ -406,9 +417,18 @@ async function initializePeopleSchema(fetchImpl: Fetch = fetch) {
   const rows = await readPeopleRows(fetchImpl);
   if (rows.length === 0) {
     const now = new Date().toISOString();
-    for (const person of DEFAULT_PEOPLE) {
-      await appendValues(PEOPLE_TAB, personValues({ ...person, createdAt: now, updatedAt: now, updatedByEmail: "system" }), fetchImpl);
-    }
+    const seedRange = `${PEOPLE_TAB}!A2:I${DEFAULT_PEOPLE.length + 1}`;
+    const values = DEFAULT_PEOPLE.map((person) => personValues({
+      ...person,
+      createdAt: now,
+      updatedAt: now,
+      updatedByEmail: "system",
+    }));
+    await sheetsFetch(
+      `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${encodeURIComponent(seedRange)}?valueInputOption=RAW`,
+      { method: "PUT", body: JSON.stringify({ range: seedRange, majorDimension: "ROWS", values }) },
+      fetchImpl,
+    );
   }
 }
 
@@ -426,7 +446,7 @@ export async function listPeopleDirectory(fetchImpl: Fetch = fetch) {
   if (!databaseConfigured()) return DEFAULT_PEOPLE;
   if (fetchImpl === fetch && cachedPeople && cachedPeople.expiresAt > Date.now()) return cachedPeople.value;
   await ensurePeopleSchema(fetchImpl);
-  const people = (await readPeopleRows(fetchImpl)).map((row) => row.person).sort((a, b) => a.name.localeCompare(b.name));
+  const people = dedupeManagedPeople((await readPeopleRows(fetchImpl)).map((row) => row.person));
   if (fetchImpl === fetch) cachedPeople = { value: people, expiresAt: Date.now() + 60_000 };
   return people;
 }
