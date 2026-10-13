@@ -103,6 +103,11 @@ type RequestRow = {
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
 let cachedPeople: { value: ManagedPerson[]; expiresAt: number } | null = null;
+let peopleReadPromise: Promise<ManagedPerson[]> | null = null;
+let peopleCacheGeneration = 0;
+let cachedRequestRows: { value: RequestRow[]; expiresAt: number } | null = null;
+let requestRowsPromise: Promise<RequestRow[]> | null = null;
+let requestCacheGeneration = 0;
 let schemaEnsured = false;
 let peopleSchemaEnsured = false;
 let peopleSchemaPromise: Promise<void> | null = null;
@@ -324,7 +329,7 @@ async function ensureRequestSchema(fetchImpl: Fetch) {
   schemaEnsured = true;
 }
 
-async function readRows(fetchImpl: Fetch = fetch) {
+async function loadRows(fetchImpl: Fetch) {
   const range = encodeURIComponent(`${REQUESTS_TAB}!A2:${REQUEST_RANGE_END}10001`);
   const response = await sheetsFetch(
     `/spreadsheets/${encodeURIComponent(spreadsheetId())}/values/${range}?majorDimension=ROWS`,
@@ -335,6 +340,30 @@ async function readRows(fetchImpl: Fetch = fetch) {
   return (body.values ?? []).map((values, index) => requestRow(values, index + 2)).filter((row) => row.request.id);
 }
 
+async function readRows(fetchImpl: Fetch = fetch, allowCache = true) {
+  if (fetchImpl !== fetch || !allowCache) return loadRows(fetchImpl);
+  if (cachedRequestRows && cachedRequestRows.expiresAt > Date.now()) return cachedRequestRows.value;
+  if (!requestRowsPromise) {
+    const generation = requestCacheGeneration;
+    const operation = loadRows(fetchImpl)
+      .then((rows) => {
+        if (generation === requestCacheGeneration) cachedRequestRows = { value: rows, expiresAt: Date.now() + 10_000 };
+        return rows;
+      })
+      .finally(() => {
+        if (requestRowsPromise === operation) requestRowsPromise = null;
+      });
+    requestRowsPromise = operation;
+  }
+  return requestRowsPromise;
+}
+
+function invalidateRequestRows() {
+  requestCacheGeneration += 1;
+  cachedRequestRows = null;
+  requestRowsPromise = null;
+}
+
 async function appendValues(tab: string, values: string[], fetchImpl: Fetch) {
   const rangeEnd = tab === REQUESTS_TAB ? REQUEST_RANGE_END : tab === PEOPLE_TAB ? "I" : tab === NOTIFICATIONS_TAB ? "L" : "F";
   const range = encodeURIComponent(`${tab}!A:${rangeEnd}`);
@@ -343,6 +372,7 @@ async function appendValues(tab: string, values: string[], fetchImpl: Fetch) {
     { method: "POST", body: JSON.stringify({ majorDimension: "ROWS", values: [values] }) },
     fetchImpl,
   );
+  if (fetchImpl === fetch && tab === REQUESTS_TAB) invalidateRequestRows();
 }
 
 async function updateRow(row: RequestRow, fetchImpl: Fetch) {
@@ -352,6 +382,7 @@ async function updateRow(row: RequestRow, fetchImpl: Fetch) {
     { method: "PUT", body: JSON.stringify({ range: rangeName, majorDimension: "ROWS", values: [row.values] }) },
     fetchImpl,
   );
+  if (fetchImpl === fetch) invalidateRequestRows();
 }
 
 function canonicalRows(rows: RequestRow[]) {
@@ -361,7 +392,7 @@ function canonicalRows(rows: RequestRow[]) {
 }
 
 async function findCanonicalRow(id: string, fetchImpl: Fetch) {
-  const matches = (await readRows(fetchImpl)).filter((row) => row.request.id === id);
+  const matches = (await readRows(fetchImpl, false)).filter((row) => row.request.id === id);
   if (new Set(matches.map((row) => row.fingerprint)).size > 1) throw new Error("IDEMPOTENCY_CONFLICT");
   return matches[0] ?? null;
 }
@@ -609,11 +640,31 @@ async function ensurePeopleSchema(fetchImpl: Fetch = fetch) {
 
 export async function listPeopleDirectory(fetchImpl: Fetch = fetch) {
   if (!databaseConfigured()) return DEFAULT_PEOPLE;
-  if (fetchImpl === fetch && cachedPeople && cachedPeople.expiresAt > Date.now()) return cachedPeople.value;
-  await ensurePeopleSchema(fetchImpl);
-  const people = dedupeManagedPeople((await readPeopleRows(fetchImpl)).map((row) => row.person));
-  if (fetchImpl === fetch) cachedPeople = { value: people, expiresAt: Date.now() + 60_000 };
-  return people;
+  if (fetchImpl !== fetch) {
+    await ensurePeopleSchema(fetchImpl);
+    return dedupeManagedPeople((await readPeopleRows(fetchImpl)).map((row) => row.person));
+  }
+  if (cachedPeople && cachedPeople.expiresAt > Date.now()) return cachedPeople.value;
+  if (!peopleReadPromise) {
+    const generation = peopleCacheGeneration;
+    const operation = (async () => {
+      await ensurePeopleSchema(fetchImpl);
+      if (cachedPeople && cachedPeople.expiresAt > Date.now()) return cachedPeople.value;
+      const people = dedupeManagedPeople((await readPeopleRows(fetchImpl)).map((row) => row.person));
+      if (generation === peopleCacheGeneration) cachedPeople = { value: people, expiresAt: Date.now() + 60_000 };
+      return people;
+    })().finally(() => {
+      if (peopleReadPromise === operation) peopleReadPromise = null;
+    });
+    peopleReadPromise = operation;
+  }
+  return peopleReadPromise;
+}
+
+function invalidatePeopleDirectory() {
+  peopleCacheGeneration += 1;
+  cachedPeople = null;
+  peopleReadPromise = null;
 }
 
 export async function listActiveTravelers(fetchImpl: Fetch = fetch): Promise<TravelerProfile[]> {
@@ -691,7 +742,7 @@ export async function saveManagedPerson(input: Partial<ManagedPerson>, actorEmai
     await appendValues(PEOPLE_TAB, personValues(person), fetchImpl);
   }
   await appendAudit("people", actorEmail, existing ? "person_updated" : "person_created", { email: person.email, name: person.name, isTraveler: person.isTraveler, isAdmin: person.isAdmin, active: person.active }, fetchImpl);
-  cachedPeople = null;
+  invalidatePeopleDirectory();
   return person;
 }
 
@@ -712,7 +763,7 @@ export async function deactivateManagedPerson(email: string, actorEmail: string,
     fetchImpl,
   );
   await appendAudit("people", actorEmail, "person_deactivated", { email: normalized }, fetchImpl);
-  cachedPeople = null;
+  invalidatePeopleDirectory();
   return person;
 }
 
@@ -1040,7 +1091,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
 
 export function clearGoogleSheetsTokenCacheForTests() {
   cachedToken = null;
-  cachedPeople = null;
+  invalidatePeopleDirectory();
   schemaEnsured = false;
   peopleSchemaEnsured = false;
   peopleSchemaPromise = null;

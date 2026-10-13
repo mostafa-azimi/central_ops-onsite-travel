@@ -177,10 +177,10 @@ export function getSnapshotTravelFeed(now = new Date()) {
 
 export async function getTravelFeed(now = new Date()): Promise<TravelFeed> {
   try {
-    const { fetchGoogleTravelEvents, googleCalendarConfigured } = await import("@/lib/google-calendar");
+    const { fetchCachedGoogleTravelEvents, googleCalendarConfigured } = await import("@/lib/google-calendar");
     if (googleCalendarConfigured()) {
       return {
-        events: await fetchGoogleTravelEvents(now),
+        events: await fetchCachedGoogleTravelEvents(now),
         refreshedAt: new Date().toISOString(),
         source: "live",
       };

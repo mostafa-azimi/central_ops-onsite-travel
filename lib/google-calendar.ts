@@ -108,6 +108,20 @@ export type CalendarWriteResult = {
 };
 
 let cachedToken: { value: string; expiresAt: number } | null = null;
+let cachedPublicEvents: { value: TravelEvent[]; expiresAt: number } | null = null;
+let publicEventsPromise: Promise<TravelEvent[]> | null = null;
+const cachedEmployeeEvents = new Map<string, { value: EmployeeTravelEvent[]; expiresAt: number }>();
+const employeeEventsPromises = new Map<string, Promise<EmployeeTravelEvent[]>>();
+let calendarCacheGeneration = 0;
+
+function invalidateCalendarCaches() {
+  calendarCacheGeneration += 1;
+  cachedPublicEvents = null;
+  publicEventsPromise = null;
+  cachedEmployeeEvents.clear();
+  employeeEventsPromises.clear();
+  revalidateTag(CALENDAR_CACHE_TAG);
+}
 
 export function googleCalendarConfigured() {
   return Boolean(
@@ -222,6 +236,23 @@ export async function fetchGoogleTravelEvents(
   return events.sort((a, b) => a.start.localeCompare(b.start));
 }
 
+export async function fetchCachedGoogleTravelEvents(now = new Date()) {
+  if (cachedPublicEvents && cachedPublicEvents.expiresAt > Date.now()) return cachedPublicEvents.value;
+  if (!publicEventsPromise) {
+    const generation = calendarCacheGeneration;
+    const operation = fetchGoogleTravelEvents(now)
+      .then((events) => {
+        if (generation === calendarCacheGeneration) cachedPublicEvents = { value: events, expiresAt: Date.now() + 60_000 };
+        return events;
+      })
+      .finally(() => {
+        if (publicEventsPromise === operation) publicEventsPromise = null;
+      });
+    publicEventsPromise = operation;
+  }
+  return publicEventsPromise;
+}
+
 export async function fetchEmployeeTravelEvents(
   employeeEmail: string,
   now = new Date(),
@@ -259,6 +290,25 @@ export async function fetchEmployeeTravelEvents(
       longitude: finiteCoordinate(privateProperties.longitude, -180, 180),
     }];
   });
+}
+
+export async function fetchCachedEmployeeTravelEvents(employeeEmail: string, now = new Date()) {
+  const key = employeeEmail.trim().toLowerCase();
+  const cached = cachedEmployeeEvents.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const pending = employeeEventsPromises.get(key);
+  if (pending) return pending;
+  const generation = calendarCacheGeneration;
+  const operation = fetchEmployeeTravelEvents(key, now)
+    .then((events) => {
+      if (generation === calendarCacheGeneration) cachedEmployeeEvents.set(key, { value: events, expiresAt: Date.now() + 20_000 });
+      return events;
+    })
+    .finally(() => {
+      if (employeeEventsPromises.get(key) === operation) employeeEventsPromises.delete(key);
+    });
+  employeeEventsPromises.set(key, operation);
+  return operation;
 }
 
 async function getManagedCalendarEvent(eventId: string, fetchImpl: Fetch) {
@@ -307,8 +357,10 @@ export async function updateCalendarAttendance(
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ attendees }),
     cache: "no-store",
+    signal: externalRequestSignal(),
   });
   if (!response.ok) throw new Error(`Calendar attendee update failed: ${await responseMessage(response)}`);
+  if (fetchImpl === fetch) invalidateCalendarCaches();
   return {
     requestId: event.extendedProperties?.private?.centralOpsRequestId ?? null,
     participants: calendarParticipantNames(assignee, attendees, travelers),
@@ -334,9 +386,10 @@ export async function rescheduleCalendarEvent(
       extendedProperties: { private: privateProperties },
     }),
     cache: "no-store",
+    signal: externalRequestSignal(),
   });
   if (!response.ok) throw new Error(`Calendar reschedule failed: ${await responseMessage(response)}`);
-  if (fetchImpl === fetch) revalidateTag(CALENDAR_CACHE_TAG);
+  if (fetchImpl === fetch) invalidateCalendarCaches();
 }
 
 export async function cancelCalendarEvent(eventId: string, fetchImpl: Fetch = fetch) {
@@ -345,11 +398,12 @@ export async function cancelCalendarEvent(eventId: string, fetchImpl: Fetch = fe
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
+    signal: externalRequestSignal(),
   });
   if (!response.ok && response.status !== 410) {
     throw new Error(`Calendar cancellation failed: ${await responseMessage(response)}`);
   }
-  if (fetchImpl === fetch) revalidateTag(CALENDAR_CACHE_TAG);
+  if (fetchImpl === fetch) invalidateCalendarCaches();
 }
 
 export async function inspectCalendarEvent(
@@ -358,7 +412,7 @@ export async function inspectCalendarEvent(
 ) {
   const token = await getGoogleAccessToken(fetchImpl);
   const url = `${CALENDAR_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(request.calendarEventId)}`;
-  const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+  const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: externalRequestSignal() });
   if (response.status === 404 || response.status === 410) return ["Calendar event is missing"];
   if (!response.ok) throw new Error(`Calendar reconciliation failed: ${await responseMessage(response)}`);
   const event = (await response.json()) as GoogleEvent;
@@ -425,10 +479,12 @@ export async function createOrGetCalendarEvent(
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(payload),
     cache: "no-store",
+    signal: externalRequestSignal(),
   });
 
   if (response.ok) {
     const event = (await response.json()) as GoogleEvent;
+    if (fetchImpl === fetch) invalidateCalendarCaches();
     return verifyExistingEvent(event, eventId, input.requestId);
   }
   if (response.status !== 409) {
@@ -438,6 +494,7 @@ export async function createOrGetCalendarEvent(
   const existing = await fetchImpl(`${url}/${encodeURIComponent(eventId)}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
+    signal: externalRequestSignal(),
   });
   if (!existing.ok) throw new Error(`Calendar event recovery failed: ${await responseMessage(existing)}`);
   const existingEvent = (await existing.json()) as GoogleEvent;
@@ -466,9 +523,11 @@ export async function createOrGetCalendarEvent(
           extendedProperties: payload.extendedProperties,
         }),
         cache: "no-store",
+        signal: externalRequestSignal(),
       },
     );
     if (!updated.ok) throw new Error(`Calendar event update failed: ${await responseMessage(updated)}`);
+    if (fetchImpl === fetch) invalidateCalendarCaches();
     return verifyExistingEvent((await updated.json()) as GoogleEvent, eventId, input.requestId);
   }
   return result;

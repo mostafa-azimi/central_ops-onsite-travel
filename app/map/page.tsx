@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { adminAuthConfigured, getEmployeeSession } from "@/lib/admin-auth";
-import { fetchEmployeeTravelEvents, googleCalendarConfigured } from "@/lib/google-calendar";
+import { fetchCachedEmployeeTravelEvents, googleCalendarConfigured } from "@/lib/google-calendar";
 import { TravelMap } from "@/components/travel-map";
 import { isAllowedAdminEmail } from "@/lib/admin-policy";
 import { googleSignInErrorMessage, googleSignInHref } from "@/lib/auth-links";
@@ -33,7 +33,7 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
   const fallbackTravelers = DEFAULT_PEOPLE.filter((person) => person.isTraveler).map(({ email, name, color }) => ({ email, name, color }));
   const [events, canAdminister, travelers] = await Promise.all([
     googleCalendarConfigured()
-      ? withExternalRequestDeadline(fetchEmployeeTravelEvents(employee.email)).catch(() => {
+      ? withExternalRequestDeadline(fetchCachedEmployeeTravelEvents(employee.email)).catch(() => {
         calendarError = "Calendar travel could not be loaded. Check the connection and refresh.";
         return [];
       })

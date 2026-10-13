@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { adminAuthConfigured, getEmployeeSession } from "@/lib/admin-auth";
 import { googleSignInErrorMessage, googleSignInHref } from "@/lib/auth-links";
-import { fetchEmployeeTravelEvents, googleCalendarConfigured } from "@/lib/google-calendar";
+import { fetchCachedEmployeeTravelEvents, googleCalendarConfigured } from "@/lib/google-calendar";
 import { isAllowedAdminEmail } from "@/lib/admin-policy";
 import { TravelCalendar } from "@/components/travel-calendar";
 import { DEFAULT_PEOPLE, type EmployeeTravelEvent } from "@/lib/types";
@@ -52,7 +52,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const fallbackTravelers = DEFAULT_PEOPLE.filter((person) => person.isTraveler).map(({ email, name, color }) => ({ email, name, color }));
   const [calendarEvents, storedRequests, canAdminister, travelers] = await Promise.all([
     testEvents.length > 0 ? Promise.resolve(testEvents) : googleCalendarConfigured()
-      ? withExternalRequestDeadline(fetchEmployeeTravelEvents(employee.email)).catch(() => {
+      ? withExternalRequestDeadline(fetchCachedEmployeeTravelEvents(employee.email)).catch(() => {
         calendarError = "Calendar travel could not be loaded. Check the connection and refresh.";
         return [];
       })
