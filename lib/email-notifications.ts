@@ -16,7 +16,7 @@ export function emailNotificationsConfigured() {
 }
 
 function appOrigin() {
-  return (process.env.APP_ORIGIN ?? "https://central-ops-travel-hub.vercel.app").replace(/\/$/, "");
+  return (process.env.APP_ORIGIN ?? "https://central-ops-travel.aiherolabs.xyz").replace(/\/$/, "");
 }
 
 function cleanHeader(value: string) {

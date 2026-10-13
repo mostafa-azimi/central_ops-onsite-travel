@@ -31,7 +31,7 @@ export async function reconcileScheduledVisits(actorEmail = "system") {
   await recordOperationalAudit("calendar_reconciled", { checked: checks.length, problems: problems.length }, actorEmail);
   if (problems.length > 0) {
     const details = problems.map((problem) => `${problem.accountName}: ${problem.issues.join("; ")}`).join("\n");
-    await notifyOperationalAlert(`calendar-reconciliation:${new Date().toISOString().slice(0, 10)}`, `Calendar reconciliation: ${problems.length} ${problems.length === 1 ? "visit needs" : "visits need"} attention`, `Central Ops Travel found Calendar differences.\n\n${details}\n\nReview: ${(process.env.APP_ORIGIN ?? "https://central-ops-travel-hub.vercel.app").replace(/\/$/, "")}/admin/operations`);
+    await notifyOperationalAlert(`calendar-reconciliation:${new Date().toISOString().slice(0, 10)}`, `Calendar reconciliation: ${problems.length} ${problems.length === 1 ? "visit needs" : "visits need"} attention`, `Central Ops Travel found Calendar differences.\n\n${details}\n\nReview: ${(process.env.APP_ORIGIN ?? "https://central-ops-travel.aiherolabs.xyz").replace(/\/$/, "")}/admin/operations`);
   }
   return { checkedAt: new Date().toISOString(), checked: checks.length, problems };
 }

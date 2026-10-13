@@ -25,7 +25,7 @@ The public schedule remains anonymous, but submitting a visit requires a verifie
 
 Traveler assignment, approval, and denial live on `/admin`. Google OpenID Connect is verified server-side against Google's signing keys, and the verified email must be an active administrator in the private people directory. The directory is managed at `/admin/settings`; administrators can add or deactivate exact `@shiphero.com` identities and grant traveler, administrator, or both roles. The initial administrator is `mike.azimi@shiphero.com`, the last active administrator cannot remove their own administrative access, and every directory change is written to the private audit log.
 
-Google administrator sign-in requires a separate web OAuth client with redirect URI `https://central-ops-travel-hub.vercel.app/api/auth/google/callback` and environment variables `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Administrator access is loaded from the private Sheet-backed people directory and fails closed if that configured directory cannot be read. Until OAuth and durable storage are configured, the public request and administrator actions fail closed and never return mock success.
+Google administrator sign-in requires a separate web OAuth client with redirect URI `https://central-ops-travel.aiherolabs.xyz/api/auth/google/callback` and environment variables `GOOGLE_OIDC_CLIENT_ID` and `GOOGLE_OIDC_CLIENT_SECRET`. Administrator access is loaded from the private Sheet-backed people directory and fails closed if that configured directory cannot be read. Until OAuth and durable storage are configured, the public request and administrator actions fail closed and never return mock success.
 
 The approval path creates one all-day Calendar event and sends an invitation to the assigned traveler. Calendar end dates are stored end-exclusive. A deterministic Google event ID makes retries recoverable without creating duplicate events or invitations. The private Google Sheet persists synchronization state, Calendar IDs, errors, decisions, and audit rows before an approval is marked complete. The public browser never receives the Sheet ID, OAuth credential, audit data, or raw rows.
 
@@ -73,7 +73,7 @@ npm test
 npm run test:e2e
 npm run lint
 npm run build
-npm run verify:deployment -- https://your-deployment.example.com
+npm run verify:deployment -- https://central-ops-travel.aiherolabs.xyz
 npm run dev
 ```
 
@@ -97,12 +97,12 @@ Railway automatically detects the root `Dockerfile`. Configure `/api/health` as 
 1. Create one Railway service from the private GitHub repository and deploy `main`. Railway should detect the root `Dockerfile` automatically.
 2. Generate the Railway public domain. Set the service healthcheck path to `/api/health` and confirm it returns HTTP 200.
 3. Add every required variable listed in `.env.example` directly in Railway. Do not send credential values through Slack, email, tickets, or source control.
-4. Set `APP_ORIGIN` to the exact Railway HTTPS origin without a trailing slash. Leave `NEXT_PUBLIC_SIGN_IN_ORIGIN` blank.
-5. Add `${APP_ORIGIN}/api/auth/google/callback` to the existing `Central Ops Travel Admin` Google Web OAuth client.
+4. Set `APP_ORIGIN=https://central-ops-travel.aiherolabs.xyz`. Leave `NEXT_PUBLIC_SIGN_IN_ORIGIN` blank.
+5. Add `https://central-ops-travel.aiherolabs.xyz/api/auth/google/callback` to the existing `Central Ops Travel Admin` Google Web OAuth client.
 6. Redeploy after the variables and callback are configured. Sign in at `/admin`, run **Check connections**, and confirm Google sign-in, Sheets, Calendar, and email are green.
 7. Verify `/`, `/map`, `/calendar`, `/admin`, and `/admin/settings` before redirecting users away from Vercel.
 8. Set the GitHub `PRODUCTION_URL` repository variable to the Railway origin. Store the same new `OPERATIONS_CRON_SECRET` in Railway and GitHub Actions secrets, then run the Calendar reconciliation workflow once.
-9. Run `npm run verify:deployment -- https://your-railway-origin` from a trusted workstation.
+9. Run `npm run verify:deployment -- https://central-ops-travel.aiherolabs.xyz` from a trusted workstation.
 
 The app stores durable workflow data in its private Google Sheet, so Railway does not need a database or persistent volume. Keep Vercel active until the Railway connection check and employee sign-in both pass.
 

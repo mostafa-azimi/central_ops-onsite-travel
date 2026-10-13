@@ -8,21 +8,21 @@ test("Google sign-in creates OAuth state only on the canonical app origin", asyn
     clientId: process.env.GOOGLE_OIDC_CLIENT_ID,
     clientSecret: process.env.GOOGLE_OIDC_CLIENT_SECRET,
   };
-  process.env.APP_ORIGIN = "https://central-ops-travel-hub.vercel.app";
+  process.env.APP_ORIGIN = "https://central-ops-travel.aiherolabs.xyz";
   process.env.GOOGLE_OIDC_CLIENT_ID = "test-client-id";
   process.env.GOOGLE_OIDC_CLIENT_SECRET = "test-client-secret";
 
   try {
     const staleAlias = await GET(new Request("https://cs-onsite-travel.vercel.app/api/auth/google/start?returnTo=%2Fmap"));
     assert.equal(staleAlias.status, 307);
-    assert.equal(staleAlias.headers.get("location"), "https://central-ops-travel-hub.vercel.app/api/auth/google/start?returnTo=%2Fmap");
+    assert.equal(staleAlias.headers.get("location"), "https://central-ops-travel.aiherolabs.xyz/api/auth/google/start?returnTo=%2Fmap");
     assert.equal(staleAlias.headers.get("set-cookie"), null);
 
-    const canonical = await GET(new Request("https://central-ops-travel-hub.vercel.app/api/auth/google/start?returnTo=%2Fmap"));
+    const canonical = await GET(new Request("https://central-ops-travel.aiherolabs.xyz/api/auth/google/start?returnTo=%2Fmap"));
     assert.equal(canonical.status, 307);
     const authorizationUrl = new URL(canonical.headers.get("location")!);
     assert.equal(authorizationUrl.origin, "https://accounts.google.com");
-    assert.equal(authorizationUrl.searchParams.get("redirect_uri"), "https://central-ops-travel-hub.vercel.app/api/auth/google/callback");
+    assert.equal(authorizationUrl.searchParams.get("redirect_uri"), "https://central-ops-travel.aiherolabs.xyz/api/auth/google/callback");
     assert.equal(authorizationUrl.searchParams.get("client_id"), "test-client-id");
     assert.ok(authorizationUrl.searchParams.get("state"));
     const cookies = canonical.headers.get("set-cookie") ?? "";

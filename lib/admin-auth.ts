@@ -68,5 +68,5 @@ export async function getAdminSession() {
 export function appOrigin(request: Request) {
   const requestOrigin = new URL(request.url).origin;
   if (requestOrigin.startsWith("http://localhost:")) return requestOrigin;
-  return (process.env.APP_ORIGIN ?? "https://central-ops-travel-hub.vercel.app").replace(/\/$/, "");
+  return (process.env.APP_ORIGIN ?? "https://central-ops-travel.aiherolabs.xyz").replace(/\/$/, "");
 }
