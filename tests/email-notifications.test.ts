@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   clearEmailTokenCacheForTests,
+  requesterAndTravelerRecipients,
   sendNotificationEmail,
   verifyEmailNotificationConnection,
 } from "@/lib/email-notifications";
+import type { StoredVisitRequest } from "@/lib/db";
 
 test("Gmail notifications use a narrow token exchange and ShipHero recipients", async () => {
   process.env.GOOGLE_EMAIL_CLIENT_ID = "email-client";
@@ -61,4 +63,31 @@ test("email notifications reject non-ShipHero recipients", async () => {
     sendNotificationEmail(["outside@example.com"], "Travel request", "Body", (async () => Response.json({})) as typeof fetch),
     /EMAIL_RECIPIENT_REQUIRED/,
   );
+});
+
+test("visit updates notify both the requester and exact assigned traveler", () => {
+  const request = {
+    requesterEmail: "amanda@shiphero.com",
+    assignedTraveler: "Sam Armenia",
+  } as Pick<StoredVisitRequest, "requesterEmail" | "assignedTraveler">;
+  const recipients = requesterAndTravelerRecipients(request, [
+    { name: "Samuel Armenia", email: "wrong.sam@shiphero.com", color: "#3281fd" },
+    { name: "Sam Armenia", email: "sam.armenia@shiphero.com", color: "#6de5a2" },
+  ]);
+
+  assert.deepEqual(recipients, ["amanda@shiphero.com", "sam.armenia@shiphero.com"]);
+});
+
+test("visit update recipients are deduplicated and never guessed by first name", () => {
+  const samePerson = requesterAndTravelerRecipients(
+    { requesterEmail: "rob.mcfaul@shiphero.com", assignedTraveler: "Rob McFaul" },
+    [{ name: "Rob McFaul", email: "rob.mcfaul@shiphero.com", color: "#f7af2d" }],
+  );
+  const noExactMatch = requesterAndTravelerRecipients(
+    { requesterEmail: "mike.azimi@shiphero.com", assignedTraveler: "Chris Haun" },
+    [{ name: "Chris Onsite", email: "chris.onsite@shiphero.com", color: "#ef5252" }],
+  );
+
+  assert.deepEqual(samePerson, ["rob.mcfaul@shiphero.com"]);
+  assert.deepEqual(noExactMatch, ["mike.azimi@shiphero.com"]);
 });

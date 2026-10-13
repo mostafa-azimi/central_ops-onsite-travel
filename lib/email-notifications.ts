@@ -1,4 +1,5 @@
-import { createNotificationRecord, getNotificationRecord, listActiveAdminEmails, markNotificationResult, type StoredVisitRequest } from "@/lib/db";
+import { createNotificationRecord, getNotificationRecord, listActiveAdminEmails, listKnownTravelers, markNotificationResult, type StoredVisitRequest } from "@/lib/db";
+import type { TravelerProfile } from "@/lib/types";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
@@ -162,6 +163,24 @@ function requestDetails(request: StoredVisitRequest) {
   ].join("\n");
 }
 
+export function requesterAndTravelerRecipients(
+  request: Pick<StoredVisitRequest, "requesterEmail" | "assignedTraveler">,
+  travelers: TravelerProfile[],
+) {
+  const recipients = [request.requesterEmail.trim().toLowerCase()];
+  if (request.assignedTraveler) {
+    const assignedName = request.assignedTraveler.trim().toLocaleLowerCase("en-US");
+    const traveler = travelers.find((person) => person.name.trim().toLocaleLowerCase("en-US") === assignedName);
+    if (traveler) recipients.push(traveler.email.trim().toLowerCase());
+  }
+  return [...new Set(recipients)].filter((email) => /^[^\s@]+@shiphero\.com$/.test(email));
+}
+
+async function visitUpdateRecipients(request: StoredVisitRequest, fetchImpl: Fetch) {
+  const travelers = await listKnownTravelers(fetchImpl).catch(() => []);
+  return requesterAndTravelerRecipients(request, travelers);
+}
+
 export async function notifyNewRequest(request: StoredVisitRequest, fetchImpl: Fetch = fetch) {
   const admins = await listActiveAdminEmails(fetchImpl).catch(() => ["mike.azimi@shiphero.com"]);
   return sendDurableNotificationBestEffort(`${request.id}:new-request`, request.id, "new_request", process.env.ADMIN_NOTIFICATION_EMAIL ? [process.env.ADMIN_NOTIFICATION_EMAIL] : admins, `Travel request: ${request.accountName}`, `${request.requesterName || request.requesterEmail} submitted a travel request.\n\n${requestDetails(request)}\n\nReview: ${appOrigin()}/admin`, fetchImpl);
@@ -183,20 +202,24 @@ export function notifyChangeRequested(request: StoredVisitRequest, recipients: s
   return sendDurableNotificationBestEffort(`${request.id}:change-request:${request.pendingChange?.requestedAt ?? request.lifecycleVersion}`, request.id, "change_requested", recipients, `Travel change needs review: ${request.accountName}`, `${change}\n\n${requestDetails(request)}\n\nReview: ${appOrigin()}/?view=submit`, fetchImpl);
 }
 
-export function notifyChangeDecision(
+export async function notifyChangeDecision(
   request: StoredVisitRequest,
   decision: "approved" | "denied",
   fetchImpl: Fetch = fetch,
 ) {
-  return sendDurableNotificationBestEffort(`${request.id}:change-${decision}:${request.lifecycleVersion}`, request.id, `change_${decision}`, [request.requesterEmail], `Travel change ${decision}: ${request.accountName}`, `Your requested travel change was ${decision}.\n\n${requestDetails(request)}\n\nView requests: ${appOrigin()}/?view=submit`, fetchImpl);
+  const recipients = decision === "approved"
+    ? await visitUpdateRecipients(request, fetchImpl)
+    : [request.requesterEmail];
+  return sendDurableNotificationBestEffort(`${request.id}:change-${decision}:${request.lifecycleVersion}`, request.id, `change_${decision}`, recipients, `Travel change ${decision}: ${request.accountName}`, `The requested travel change was ${decision}.\n\n${requestDetails(request)}\n\nView requests: ${appOrigin()}/?view=submit`, fetchImpl);
 }
 
-export function notifyVisitUpdated(
+export async function notifyVisitUpdated(
   request: StoredVisitRequest,
   action: "rescheduled" | "cancelled",
   fetchImpl: Fetch = fetch,
 ) {
-  return sendDurableNotificationBestEffort(`${request.id}:visit-${action}:${request.lifecycleVersion}`, request.id, `visit_${action}`, [request.requesterEmail], `Travel visit ${action}: ${request.accountName}`, `An administrator ${action} this visit.\n\n${requestDetails(request)}\n\nView requests: ${appOrigin()}/?view=submit`, fetchImpl);
+  const recipients = await visitUpdateRecipients(request, fetchImpl);
+  return sendDurableNotificationBestEffort(`${request.id}:visit-${action}:${request.lifecycleVersion}`, request.id, `visit_${action}`, recipients, `Travel visit ${action}: ${request.accountName}`, `An administrator ${action} this visit.\n\n${requestDetails(request)}\n\nView requests: ${appOrigin()}/?view=submit`, fetchImpl);
 }
 
 export async function notifyOperationalAlert(key: string, subject: string, body: string, fetchImpl: Fetch = fetch) {
