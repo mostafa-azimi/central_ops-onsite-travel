@@ -4,10 +4,15 @@ import { adminAuthConfigured, appOrigin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
+function publicRequestHost(request: Request) {
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  return forwardedHost || request.headers.get("host")?.trim() || new URL(request.url).host;
+}
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const canonicalOrigin = appOrigin(request);
-  if (requestUrl.origin !== canonicalOrigin) {
+  if (publicRequestHost(request) !== new URL(canonicalOrigin).host) {
     return NextResponse.redirect(new URL(`${requestUrl.pathname}${requestUrl.search}`, canonicalOrigin));
   }
 

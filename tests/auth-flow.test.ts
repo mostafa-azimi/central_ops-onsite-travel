@@ -29,6 +29,20 @@ test("Google sign-in creates OAuth state only on the canonical app origin", asyn
     assert.match(cookies, /central_ops_oauth_state=/);
     assert.match(cookies, /central_ops_oauth_verifier=/);
     assert.match(cookies, /central_ops_oauth_return=%2Fmap/);
+
+    process.env.APP_ORIGIN = "https://central-ops-travel.aiherolabs.xyz";
+    const railwayProxy = await GET(new Request("http://0.0.0.0:3000/api/auth/google/start?returnTo=%2Fadmin", {
+      headers: {
+        host: "0.0.0.0:3000",
+        "x-forwarded-host": "central-ops-travel.aiherolabs.xyz",
+        "x-forwarded-proto": "https",
+      },
+    }));
+    assert.equal(railwayProxy.status, 307);
+    const railwayAuthorizationUrl = new URL(railwayProxy.headers.get("location")!);
+    assert.equal(railwayAuthorizationUrl.origin, "https://accounts.google.com");
+    assert.equal(railwayAuthorizationUrl.searchParams.get("redirect_uri"), "https://central-ops-travel.aiherolabs.xyz/api/auth/google/callback");
+    assert.match(railwayProxy.headers.get("set-cookie") ?? "", /central_ops_oauth_state=/);
   } finally {
     if (prior.appOrigin === undefined) delete process.env.APP_ORIGIN;
     else process.env.APP_ORIGIN = prior.appOrigin;
