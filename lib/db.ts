@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { normalizeAccountName, type ReadinessAnswers, type VisitRequestSubmission } from "@/lib/submissions";
 import { DEFAULT_PEOPLE, TRAVELER_COLOR_OPTIONS, TRAVELER_EMAILS, type Assignee, type ManagedPerson, type TravelerProfile } from "@/lib/types";
+import { externalRequestSignal } from "@/lib/external-request";
 
 const SHEETS_API = "https://sheets.googleapis.com/v4";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -165,6 +166,7 @@ async function accessToken(fetchImpl: Fetch = fetch) {
       grant_type: "refresh_token",
     }),
     cache: "no-store",
+    signal: externalRequestSignal(),
   });
   if (!response.ok) throw new Error(`Google Sheets token refresh failed: ${await responseMessage(response)}`);
   const body = (await response.json()) as { access_token?: string; expires_in?: number };
@@ -305,6 +307,7 @@ async function sheetsFetch(path: string, init: RequestInit, fetchImpl: Fetch) {
     ...init,
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...init.headers },
     cache: "no-store",
+    signal: init.signal ?? externalRequestSignal(),
   });
   if (!response.ok) throw new Error(`Google Sheets request failed: ${await responseMessage(response)}`);
   return response;
@@ -1010,6 +1013,7 @@ export async function createPrivateRequestSpreadsheet(fetchImpl: Fetch = fetch) 
       ],
     }),
     cache: "no-store",
+    signal: externalRequestSignal(),
   });
   if (!response.ok) throw new Error(`Google Sheet creation failed: ${await responseMessage(response)}`);
   const body = (await response.json()) as { spreadsheetId?: string };

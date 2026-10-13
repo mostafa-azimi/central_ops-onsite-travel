@@ -1,20 +1,23 @@
-import { getTravelFeed } from "@/lib/calendar";
+import { getSnapshotTravelFeed, getTravelFeed } from "@/lib/calendar";
 import { TravelDashboard } from "@/components/travel-dashboard";
 import { databaseConfigured, listActiveTravelers, listEmployeeVisitRequests } from "@/lib/db";
 import { getEmployeeSession } from "@/lib/admin-auth";
 import { isAllowedAdminEmail } from "@/lib/admin-policy";
+import { DEFAULT_PEOPLE } from "@/lib/types";
+import { withExternalRequestDeadline } from "@/lib/external-request";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
-  const { view } = await searchParams;
+export default async function Home({ searchParams }: { searchParams: Promise<{ view?: string; error?: string }> }) {
+  const { view, error } = await searchParams;
   const employee = await getEmployeeSession();
   const hasDatabase = databaseConfigured();
+  const fallbackTravelers = DEFAULT_PEOPLE.filter((person) => person.isTraveler).map(({ email, name, color }) => ({ email, name, color }));
   const [feed, requests, travelers, canAdminister] = await Promise.all([
-    getTravelFeed(),
-    employee && hasDatabase ? listEmployeeVisitRequests(employee.email) : Promise.resolve([]),
-    listActiveTravelers(),
-    employee ? isAllowedAdminEmail(employee.email) : Promise.resolve(false),
+    withExternalRequestDeadline(getTravelFeed()).catch(() => getSnapshotTravelFeed()),
+    employee && hasDatabase ? withExternalRequestDeadline(listEmployeeVisitRequests(employee.email)).catch(() => []) : Promise.resolve([]),
+    withExternalRequestDeadline(listActiveTravelers()).catch(() => fallbackTravelers),
+    employee ? withExternalRequestDeadline(isAllowedAdminEmail(employee.email)).catch(() => false) : Promise.resolve(false),
   ]);
   return <TravelDashboard
     feed={feed}
@@ -24,5 +27,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ v
     canAdminister={canAdminister}
     travelers={travelers}
     initialView={view === "submit" ? "submit" : "schedule"}
+    authError={error}
   />;
 }

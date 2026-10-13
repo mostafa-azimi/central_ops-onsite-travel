@@ -4,6 +4,7 @@ import { allowedAssignee, CALENDAR_ID, CALENDAR_TIME_ZONE, publicFields } from "
 import { addressWithPostalCode, inclusiveEndToExclusive, readinessScore, type ReadinessAnswers, type TripType } from "@/lib/submissions";
 import { DEFAULT_PEOPLE, type Assignee, type EmployeeTravelEvent, type TravelEvent, type TravelerProfile } from "@/lib/types";
 import { listKnownTravelers } from "@/lib/db";
+import { externalRequestSignal } from "@/lib/external-request";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
@@ -143,6 +144,7 @@ export async function getGoogleAccessToken(fetchImpl: Fetch = fetch) {
       grant_type: "refresh_token",
     }),
     cache: "no-store",
+    signal: externalRequestSignal(),
   });
   if (!response.ok) throw new Error(`Google token refresh failed: ${await responseMessage(response)}`);
   const body = (await response.json()) as { access_token?: string; expires_in?: number };
@@ -206,7 +208,7 @@ export async function fetchGoogleTravelEvents(
     if (pageToken) query.set("pageToken", pageToken);
     const response = await fetchImpl(
       `${CALENDAR_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events?${query}`,
-      { headers: { Authorization: `Bearer ${token}` }, next: { revalidate: 900, tags: [CALENDAR_CACHE_TAG] } },
+      { headers: { Authorization: `Bearer ${token}` }, next: { revalidate: 900, tags: [CALENDAR_CACHE_TAG] }, signal: externalRequestSignal() },
     );
     if (!response.ok) throw new Error(`Google Calendar read failed: ${await responseMessage(response)}`);
     const body = (await response.json()) as { items?: GoogleEvent[]; nextPageToken?: string };
@@ -239,7 +241,7 @@ export async function fetchEmployeeTravelEvents(
   });
   const response = await fetchImpl(
     `${CALENDAR_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events?${query}`,
-    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: externalRequestSignal() },
   );
   if (!response.ok) throw new Error(`Google Calendar read failed: ${await responseMessage(response)}`);
   const body = (await response.json()) as { items?: GoogleEvent[] };
@@ -263,7 +265,7 @@ async function getManagedCalendarEvent(eventId: string, fetchImpl: Fetch) {
   if (!/^[a-z0-9_-]{5,1024}$/i.test(eventId)) throw new Error("INVALID_EVENT_ID");
   const token = await getGoogleAccessToken(fetchImpl);
   const url = `${CALENDAR_API}/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(eventId)}`;
-  const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+  const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: externalRequestSignal() });
   if (!response.ok) throw new Error(`Calendar event lookup failed: ${await responseMessage(response)}`);
   const event = (await response.json()) as GoogleEvent;
   const travelers = await listKnownTravelers(fetchImpl);

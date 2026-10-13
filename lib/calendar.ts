@@ -1,6 +1,7 @@
 import * as ical from "node-ical";
 import snapshot from "@/data/snapshot.json";
 import { DEFAULT_PEOPLE, type Assignee, type TravelEvent, type TravelFeed, type TravelerProfile } from "@/lib/types";
+import { externalRequestSignal } from "@/lib/external-request";
 
 export const CALENDAR_ID =
   "c_8c7ba0dba70e52cecccbcaf595c59c55462074d031f50eecca5138a8303bc6f2@group.calendar.google.com";
@@ -170,6 +171,10 @@ function snapshotFeed(now: Date): TravelFeed {
   };
 }
 
+export function getSnapshotTravelFeed(now = new Date()) {
+  return snapshotFeed(now);
+}
+
 export async function getTravelFeed(now = new Date()): Promise<TravelFeed> {
   try {
     const { fetchGoogleTravelEvents, googleCalendarConfigured } = await import("@/lib/google-calendar");
@@ -189,6 +194,7 @@ export async function getTravelFeed(now = new Date()): Promise<TravelFeed> {
     const response = await fetch(calendarUrl, {
       next: { revalidate: 900 },
       headers: { Accept: "text/calendar" },
+      signal: externalRequestSignal(),
     });
     if (!response.ok) throw new Error(`Calendar returned ${response.status}`);
     const raw = await response.text();

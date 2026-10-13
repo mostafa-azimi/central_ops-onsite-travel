@@ -8,7 +8,7 @@ import { AddressFields } from "@/components/address-fields";
 import { ReadinessFields } from "@/components/readiness-fields";
 import type { StoredVisitRequest } from "@/lib/db";
 import { READINESS_ITEMS } from "@/lib/submissions";
-import { googleSignInHref } from "@/lib/auth-links";
+import { googleSignInErrorMessage, googleSignInHref } from "@/lib/auth-links";
 
 const TZ = "America/New_York";
 
@@ -72,6 +72,7 @@ export function TravelDashboard({
   canAdminister,
   travelers,
   initialView,
+  authError,
 }: {
   feed: TravelFeed;
   requestStorageConfigured: boolean;
@@ -80,6 +81,7 @@ export function TravelDashboard({
   canAdminister: boolean;
   travelers: TravelerProfile[];
   initialView: "schedule" | "submit";
+  authError?: string;
 }) {
   const [view, setView] = useState<"schedule" | "submit">(initialView);
   const [query, setQuery] = useState("");
@@ -305,6 +307,7 @@ export function TravelDashboard({
               <div className="employee-gate">
                 <h3>ShipHero sign-in required</h3>
                 <p>Sign in so your request and any future date or cancellation changes can be verified.</p>
+                {authError && <div className="submit-status error" role="alert">{googleSignInErrorMessage(authError)}</div>}
                 <a className="btn-primary admin-signin" href={googleSignInHref("/?view=submit")}>Sign in with Google</a>
               </div>
             ) : (

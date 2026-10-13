@@ -1,13 +1,16 @@
 import { cookies } from "next/headers";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { INITIAL_ADMIN_EMAIL, isAllowedAdminEmail } from "@/lib/admin-policy";
+import { EXTERNAL_REQUEST_TIMEOUT_MS } from "@/lib/external-request";
 
 export const ADMIN_COOKIE = "central_ops_admin";
 export const E2E_AUTH_COOKIE = "central_ops_e2e_user";
 export { INITIAL_ADMIN_EMAIL };
 
 const GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
-const GOOGLE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
+const GOOGLE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"), {
+  timeoutDuration: EXTERNAL_REQUEST_TIMEOUT_MS,
+});
 
 export type AdminSession = {
   email: string;
