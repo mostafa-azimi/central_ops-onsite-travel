@@ -218,12 +218,12 @@ export function AdminDashboard({ initialRequests, travelers }: { initialRequests
           <article className="scheduled-card" key={request.id}>
             <div className="scheduled-summary"><div><h3>{request.accountName}</h3><p>{request.assignedTraveler} · {request.fullAddress} · {request.start} to {request.end}</p><span className={`confidence confidence-${request.dateConfidence}`}>{request.dateConfidence} confidence</span></div>{request.calendarEventUrl && <a href={request.calendarEventUrl} target="_blank" rel="noreferrer">Calendar event</a>}</div>
             {request.pendingChange && <div className="change-request"><strong>{request.pendingChange.type === "cancel" ? "Requester wants to cancel" : `Requester proposed ${request.pendingChange.start} to ${request.pendingChange.end}`}</strong><span>Submitted by {request.requesterName || request.pendingChange.requestedByEmail}</span><div className="scheduled-actions"><button className="btn-primary" type="button" disabled={workingId === request.id} onClick={() => void decideChange(request.id, "approve_change")}>Approve change</button><button className="filter" type="button" disabled={workingId === request.id} onClick={() => void decideChange(request.id, "deny_change")}>Deny</button></div></div>}
-            <details><summary>Reschedule visit</summary><form className="visit-form reschedule-form" onSubmit={(event) => void reschedule(request.id, event)}>
+            {request.status === "approved" ? <details><summary>Reschedule visit</summary><form className="visit-form reschedule-form" onSubmit={(event) => void reschedule(request.id, event)}>
               <AddressFields initial={request} />
               <label><span>Start date</span><input name="start" type="date" required defaultValue={request.start} /></label>
               <label><span>End date</span><input name="end" type="date" required defaultValue={request.end} /></label>
               <div className="form-actions full"><button className="btn-primary" type="submit" disabled={workingId === request.id}>Save reschedule</button><span>Calendar attendees will receive an update.</span></div>
-            </form></details>
+            </form></details> : <div className="setup-note"><strong>Finish approval before changing dates</strong><span>The existing Calendar event remains unchanged until approval is complete.</span></div>}
             <div className="scheduled-actions">
               {request.status === "pending" && <button className="filter" type="button" onClick={() => void decide(request.id, "approve", request.assignedTraveler ?? undefined)}>Finish approval</button>}
               <button className="danger-button" type="button" disabled={workingId === request.id} onClick={() => void cancel(request.id)}>{confirmCancelId === request.id ? "Confirm cancellation" : "Cancel visit"}</button>
