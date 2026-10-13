@@ -200,9 +200,12 @@ test("verified employee can explore visits in month and week calendar views", as
 
   await expect(page.getByRole("heading", { name: "Calendar view" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "October 2026" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Cane Brew/ }).first()).toContainText("Bay Minette, AL");
   await page.getByRole("button", { name: /Cane Brew/ }).first().click();
   const details = page.getByRole("dialog", { name: "Cane Brew" });
   await expect(details).toContainText("Oct 8, 2026 to Oct 9, 2026");
+  await expect(details).toContainText("City and state");
+  await expect(details).toContainText("Bay Minette, AL");
   await expect(details).toContainText("Mike Azimi");
   await expect(details).toContainText("Amanda Example");
   await expect(details.getByRole("button", { name: "Join and shadow" })).toBeEnabled();

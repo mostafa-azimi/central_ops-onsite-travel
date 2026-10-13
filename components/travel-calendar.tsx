@@ -44,6 +44,10 @@ function eventTime(event: EmployeeTravelEvent) {
   }).format(new Date(event.start));
 }
 
+function eventCityState(event: EmployeeTravelEvent) {
+  return [event.city, event.state].filter(Boolean).join(", ") || event.location || "Location pending";
+}
+
 function eventRange(event: EmployeeTravelEvent) {
   if (event.allDay) {
     const first = event.start.slice(0, 10);
@@ -205,6 +209,7 @@ export function TravelCalendar({
                         <button className={`calendar-event${isContinuation ? " continuation" : ""}`} style={style} type="button" key={`${day}-${event.calendarEventId}`} onClick={() => setSelectedEvent(event)}>
                           <span>{eventTime(event)}</span>
                           <strong>{event.customer}</strong>
+                          <small className="calendar-event-location">{eventCityState(event)}</small>
                           {mode === "week" && <small>{event.assignee}</small>}
                         </button>
                       );
@@ -230,7 +235,8 @@ export function TravelCalendar({
             <h2 id="calendar-event-title">{selectedEvent.customer}</h2>
             <dl>
               <div><dt>Dates</dt><dd>{eventRange(selectedEvent)}</dd></div>
-              <div><dt>Location</dt><dd>{selectedEvent.location || "Location pending"}</dd></div>
+              <div><dt>City and state</dt><dd>{eventCityState(selectedEvent)}</dd></div>
+              {selectedEvent.location && selectedEvent.location !== eventCityState(selectedEvent) && <div><dt>Address</dt><dd>{selectedEvent.location}</dd></div>}
               <div><dt>Traveler</dt><dd>{selectedEvent.assignee}</dd></div>
               <div><dt>Joining</dt><dd>{selectedEvent.participants.length > 0 ? selectedEvent.participants.join(", ") : "No additional teammates"}</dd></div>
             </dl>

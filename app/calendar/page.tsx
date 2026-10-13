@@ -5,7 +5,7 @@ import { fetchEmployeeTravelEvents, googleCalendarConfigured } from "@/lib/googl
 import { isAllowedAdminEmail } from "@/lib/admin-policy";
 import { TravelCalendar } from "@/components/travel-calendar";
 import type { EmployeeTravelEvent } from "@/lib/types";
-import { listActiveTravelers } from "@/lib/db";
+import { databaseConfigured, listActiveTravelers, listVisitRequests } from "@/lib/db";
 import { ShipHeroBrand } from "@/components/shiphero-brand";
 
 export const dynamic = "force-dynamic";
@@ -42,16 +42,28 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     allDay: true,
     participants: ["Amanda Example"],
     joined: false,
+    city: "Bay Minette",
+    state: "AL",
     countryCode: "US",
     latitude: 30.88,
     longitude: -87.77,
   }] : [];
-  const events = testEvents.length > 0 ? testEvents : googleCalendarConfigured()
+  const calendarEvents = testEvents.length > 0 ? testEvents : googleCalendarConfigured()
     ? await fetchEmployeeTravelEvents(employee.email).catch(() => {
         calendarError = "Calendar travel could not be loaded. Check the connection and refresh.";
         return [];
       })
     : [];
+  const storedRequests = testEvents.length === 0 && databaseConfigured()
+    ? await listVisitRequests().catch(() => [])
+    : [];
+  const requestByCalendarEvent = new Map(storedRequests
+    .filter((request) => request.calendarEventId)
+    .map((request) => [request.calendarEventId!, request]));
+  const events = calendarEvents.map((event) => {
+    const request = requestByCalendarEvent.get(event.calendarEventId);
+    return request ? { ...event, city: request.city, state: request.state } : event;
+  });
   const [canAdminister, travelers] = await Promise.all([isAllowedAdminEmail(employee.email), listActiveTravelers()]);
 
   return (

@@ -85,6 +85,8 @@ export type EmployeeTravelEvent = TravelEvent & {
   calendarEventId: string;
   participants: string[];
   joined: boolean;
+  city?: string;
+  state?: string;
   countryCode?: string;
   latitude: number | null;
   longitude: number | null;
