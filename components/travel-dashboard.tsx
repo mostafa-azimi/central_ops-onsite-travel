@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ShipHeroBrand } from "@/components/shiphero-brand";
 import type { Assignee, TravelFeed, TravelerProfile } from "@/lib/types";
@@ -65,14 +65,15 @@ function durationLabel(start: string, end: string, allDay: boolean) {
 }
 
 export function TravelDashboard({
-  feed,
+  feed: initialFeed,
   requestStorageConfigured,
   employee,
   initialRequests,
-  canAdminister,
-  travelers,
+  canAdminister: initialCanAdminister,
+  travelers: initialTravelers,
   initialView,
   authError,
+  refreshOnMount = false,
 }: {
   feed: TravelFeed;
   requestStorageConfigured: boolean;
@@ -82,8 +83,13 @@ export function TravelDashboard({
   travelers: TravelerProfile[];
   initialView: "schedule" | "submit";
   authError?: string;
+  refreshOnMount?: boolean;
 }) {
   const [view, setView] = useState<"schedule" | "submit">(initialView);
+  const [feed, setFeed] = useState(initialFeed);
+  const [travelers, setTravelers] = useState(initialTravelers);
+  const [canAdminister, setCanAdminister] = useState(initialCanAdminister);
+  const [refreshState, setRefreshState] = useState<"idle" | "loading" | "complete" | "error">(refreshOnMount ? "loading" : "idle");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Assignee[]>([]);
   const [formStart, setFormStart] = useState("");
@@ -95,6 +101,41 @@ export function TravelDashboard({
     kind: "idle" | "working" | "success" | "error";
     message: string;
   }>({ kind: "idle", message: "" });
+
+  useEffect(() => {
+    if (!refreshOnMount) return;
+    const controller = new AbortController();
+    void fetch("/api/home-data", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Travel data could not be refreshed.");
+        return response.json() as Promise<{
+          feed: TravelFeed;
+          requests: StoredVisitRequest[];
+          travelers: TravelerProfile[];
+          canAdminister: boolean;
+        }>;
+      })
+      .then((result) => {
+        setFeed(result.feed);
+        setTravelers(result.travelers);
+        setCanAdminister(result.canAdminister);
+        setRequests((current) => {
+          const currentById = new Map(current.map((request) => [request.id, request]));
+          const merged = result.requests.map((request) => {
+            const local = currentById.get(request.id);
+            currentById.delete(request.id);
+            return local && local.lifecycleVersion >= request.lifecycleVersion ? local : request;
+          });
+          return [...merged, ...currentById.values()];
+        });
+        setRefreshState("complete");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setRefreshState("error");
+      });
+    return () => controller.abort();
+  }, [refreshOnMount]);
 
   const events = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("en-US");
@@ -222,9 +263,15 @@ export function TravelDashboard({
             <h1><Link className="home-title" href="/" onClick={() => setView("schedule")}>Central Ops Travel</Link></h1>
             <p className="hero-copy">Plan customer visits and keep the team aligned.</p>
           </div>
-          <div className={feed.source === "live" ? "sync-pill" : "sync-pill pending"} aria-label="Calendar refresh status">
+          <div className={feed.source === "live" && refreshState !== "loading" ? "sync-pill" : "sync-pill pending"} aria-label="Calendar refresh status">
             <span aria-hidden="true" />
-            {feed.source === "live" ? "Private calendar sync · Every 15 minutes" : "Verified snapshot · Live sync pending"}
+            {refreshState === "loading"
+              ? "Loading live calendar"
+              : feed.source === "live"
+                ? "Private calendar sync · Every 15 minutes"
+                : refreshState === "error"
+                  ? "Verified snapshot · Refresh unavailable"
+                  : "Verified snapshot · Live sync pending"}
           </div>
         </div>
       </header>
