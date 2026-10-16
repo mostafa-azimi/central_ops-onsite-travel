@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { additionalParticipantNames, cancelCalendarEvent, createOrGetCalendarEvent, googleEventToPublic, rescheduleCalendarEvent, updateCalendarAttendance } from "@/lib/google-calendar";
+import { additionalParticipantNames, calendarLocation, cancelCalendarEvent, createOrGetCalendarEvent, googleEventToPublic, rescheduleCalendarEvent, updateCalendarAttendance } from "@/lib/google-calendar";
 import { approvalConnectionError } from "@/lib/approve-request";
 import type { StoredVisitRequest } from "@/lib/db";
 import { READINESS_ITEMS, type ReadinessAnswers } from "@/lib/submissions";
@@ -119,6 +119,12 @@ test("map joiners exclude the assigned traveler and deduplicate verified employe
   ]), ["Alex Person"]);
 });
 
+test("Calendar location adds structured city/state without duplicating an existing address", () => {
+  assert.equal(calendarLocation({ fullAddress: "1301 WATERS RIDGE DR", city: "Lewisville", state: "TX", postalCode: "75057-6022" }), "1301 WATERS RIDGE DR, Lewisville, TX, 75057-6022");
+  assert.equal(calendarLocation({ fullAddress: "123 Peachtree St NE, Atlanta, GA 30303, USA", city: "Atlanta", state: "GA", postalCode: "30303" }), "123 Peachtree St NE, Atlanta, GA 30303, USA");
+  assert.equal(calendarLocation({ city: "Toronto", state: "ON", postalCode: "M5H 1A1" }), "Toronto, ON, M5H 1A1");
+});
+
 test("Calendar creation is deterministic and keeps the all-day end exclusive", async () => {
   process.env.GOOGLE_CALENDAR_CLIENT_ID = "test-client";
   process.env.GOOGLE_CALENDAR_CLIENT_SECRET = "test-secret";
@@ -144,8 +150,8 @@ test("Calendar creation is deterministic and keeps the all-day end exclusive", a
     tripType: request.tripType,
     companyName: "GTI",
     cashUrl: request.cashUrl,
-    city: request.city,
-    state: request.state,
+    city: "Bay Minette",
+    state: "AL",
     fullAddress: "2109 N US Hwy 31, Bay Minette, AL",
     postalCode: "36507",
     start: request.start,
@@ -164,6 +170,7 @@ test("Calendar creation is deterministic and keeps the all-day end exclusive", a
   assert.deepEqual(payload.end, { date: "2026-10-08" });
   assert.equal(payload.summary, "Mike Azimi: GTI");
   assert.equal(payload.location, "2109 N US Hwy 31, Bay Minette, AL, 36507");
+  assert.match(payload.description, /City \/ state: Bay Minette, AL/);
   assert.deepEqual(payload.attendees, [{ email: "mike.azimi@shiphero.com" }]);
   assert.match(payload.description, /CASH account: https:\/\/cash\.shiphero\.com\/client\/100000/);
   assert.match(payload.description, /Warehouse start: 08:30/);
@@ -254,18 +261,21 @@ test("reschedule and cancellation notify Calendar attendees", async () => {
     return Response.json({
       id: "event123",
       summary: "Mike Azimi: GTI",
+      description: "City / state: Atlanta, GA\nCASH account: https://cash.shiphero.com/client/100000\nPoint of contact: Jamie\nCustom note to preserve",
       attendees: [{ email: "mike.azimi@shiphero.com", displayName: "Mike Azimi" }],
       extendedProperties: { private: {} },
     });
   }) as typeof fetch;
   await rescheduleCalendarEvent("event123", {
-    start: "2026-11-10", endInclusive: "2026-11-12", fullAddress: "1 King St, Toronto, ON, Canada", latitude: 43.65, longitude: -79.38,
+    start: "2026-11-10", endInclusive: "2026-11-12", fullAddress: "1 King St", city: "Toronto", state: "ON", latitude: 43.65, longitude: -79.38,
   }, fakeFetch);
   await cancelCalendarEvent("event123", fakeFetch);
   const patch = calls.find((call) => call.init?.method === "PATCH");
   const payload = JSON.parse(String(patch?.init?.body));
   assert.deepEqual(payload.end, { date: "2026-11-13" });
-  assert.equal(payload.location, "1 King St, Toronto, ON, Canada");
+  assert.equal(payload.location, "1 King St, Toronto, ON");
+  assert.equal(payload.description, "City / state: Toronto, ON\nCASH account: https://cash.shiphero.com/client/100000\nPoint of contact: Jamie\nCustom note to preserve");
+  assert.equal(payload.attendees, undefined, "rescheduling must not replace existing attendees");
   assert.ok(calls.some((call) => call.init?.method === "DELETE" && call.url.includes("sendUpdates=all")));
 });
 

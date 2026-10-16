@@ -16,6 +16,7 @@ type GoogleEvent = {
   id?: string;
   status?: string;
   summary?: string;
+  description?: string;
   location?: string;
   htmlLink?: string;
   start?: { date?: string; dateTime?: string };
@@ -47,10 +48,26 @@ type CalendarWriteInput = {
   warehouseStartTime?: string;
 };
 
+export function calendarLocation(input: { fullAddress?: string; city?: string; state?: string; postalCode?: string }) {
+  let address = input.fullAddress?.trim() ?? "";
+  const words = (value: string) => ` ${value.toLocaleLowerCase("en-US").replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+  for (const part of [input.city, input.state]) {
+    const value = part?.trim();
+    if (value && !words(address).includes(words(value))) address = [address, value].filter(Boolean).join(", ");
+  }
+  return addressWithPostalCode(address, input.postalCode ?? "");
+}
+
+function cityStateLine(input: { city?: string; state?: string }) {
+  const place = [input.city?.trim(), input.state?.trim()].filter(Boolean).join(", ");
+  return place ? `City / state: ${place}` : "";
+}
+
 function calendarDescription(input: CalendarWriteInput) {
   const score = input.tripType === "Onboarding" && input.readiness ? readinessScore(input.readiness) : null;
   return [
     `Visit type: ${input.tripType}`,
+    cityStateLine(input),
     `CASH account: ${input.cashUrl}`,
     input.warehouseStartTime ? `Warehouse start: ${input.warehouseStartTime}` : "",
     input.contactName ? `Point of contact: ${input.contactName} · ${input.contactEmail} · ${input.contactPhone}` : "",
@@ -369,7 +386,7 @@ export async function updateCalendarAttendance(
 
 export async function rescheduleCalendarEvent(
   eventId: string,
-  input: { start: string; endInclusive: string; fullAddress: string; postalCode?: string; latitude?: number | null; longitude?: number | null },
+  input: { start: string; endInclusive: string; fullAddress: string; city?: string; state?: string; postalCode?: string; latitude?: number | null; longitude?: number | null },
   fetchImpl: Fetch = fetch,
 ) {
   const { token, url, event } = await getManagedCalendarEvent(eventId, fetchImpl);
@@ -382,7 +399,11 @@ export async function rescheduleCalendarEvent(
     body: JSON.stringify({
       start: { date: input.start },
       end: { date: inclusiveEndToExclusive(input.endInclusive) },
-      location: addressWithPostalCode(input.fullAddress, input.postalCode ?? ""),
+      location: calendarLocation(input),
+      ...(cityStateLine(input) ? { description: [
+        cityStateLine(input),
+        ...(event.description ?? "").split(/\r?\n/).filter((line) => !line.startsWith("City / state:")),
+      ].filter(Boolean).join("\n") } : {}),
       extendedProperties: { private: privateProperties },
     }),
     cache: "no-store",
@@ -456,9 +477,7 @@ export async function createOrGetCalendarEvent(
     id: eventId,
     summary: `${input.traveler}: ${input.companyName}`,
     description: calendarDescription(input),
-    location: input.fullAddress
-      ? addressWithPostalCode(input.fullAddress, input.postalCode ?? "")
-      : [input.city, input.state, input.postalCode].filter(Boolean).join(", "),
+    location: calendarLocation(input),
     start: { date: input.start },
     end: { date: inclusiveEndToExclusive(input.endInclusive) },
     attendees: [{ email: travelerEmail }],
