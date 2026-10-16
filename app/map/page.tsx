@@ -1,13 +1,8 @@
 import Link from "next/link";
 import { adminAuthConfigured, getEmployeeSession } from "@/lib/admin-auth";
-import { fetchCachedEmployeeTravelEvents, googleCalendarConfigured } from "@/lib/google-calendar";
 import { TravelMap } from "@/components/travel-map";
-import { isAllowedAdminEmail } from "@/lib/admin-policy";
 import { googleSignInErrorMessage, googleSignInHref } from "@/lib/auth-links";
-import { listActiveTravelers } from "@/lib/db";
 import { ShipHeroBrand } from "@/components/shiphero-brand";
-import { DEFAULT_PEOPLE } from "@/lib/types";
-import { withExternalRequestDeadline } from "@/lib/external-request";
 
 export const dynamic = "force-dynamic";
 
@@ -29,17 +24,5 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
       </main>
     );
   }
-  let calendarError = "";
-  const fallbackTravelers = DEFAULT_PEOPLE.filter((person) => person.isTraveler).map(({ email, name, color }) => ({ email, name, color }));
-  const [events, canAdminister, travelers] = await Promise.all([
-    googleCalendarConfigured()
-      ? withExternalRequestDeadline(fetchCachedEmployeeTravelEvents(employee.email)).catch(() => {
-        calendarError = "Calendar travel could not be loaded. Check the connection and refresh.";
-        return [];
-      })
-      : Promise.resolve([]),
-    withExternalRequestDeadline(isAllowedAdminEmail(employee.email)).catch(() => false),
-    withExternalRequestDeadline(listActiveTravelers()).catch(() => fallbackTravelers),
-  ]);
-  return <TravelMap employee={employee} initialEvents={events} canAdminister={canAdminister} travelers={travelers} initialError={calendarError} />;
+  return <TravelMap employee={employee} />;
 }

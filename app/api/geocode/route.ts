@@ -39,6 +39,7 @@ export async function GET(request: Request) {
         "User-Agent": "CentralOpsTravel/1.0 (https://cs-onsite-travel.vercel.app)",
       },
       next: { revalidate: 604800 },
+      signal: AbortSignal.timeout(4_000),
     });
     if (!response.ok) return NextResponse.json({ suggestions: [] }, { status: 502 });
     return NextResponse.json({ suggestions: parsePhotonResponse(await response.json()) });

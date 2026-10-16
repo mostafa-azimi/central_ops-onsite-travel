@@ -13,6 +13,8 @@ test("postal lookups normalize codes and return city and state", () => {
   assert.equal(normalizePostalCode(" 36507 "), "36507");
   assert.equal(normalizePostalCode("sw1a 2aa"), "SW1A 2AA");
   assert.equal(postalLookupCode("CA", "M5V 3A8"), "M5V");
+  assert.equal(postalLookupCode("US", "75057-6022"), "75057");
+  assert.equal(postalCodeFromLocation("1301 WATERS RIDGE DR, 75057-6022", "US"), "75057-6022");
   assert.deepEqual(parsePostalResponse({
     "post code": "36507",
     "country abbreviation": "US",

@@ -32,6 +32,7 @@ export async function GET(request: Request) {
     const response = await fetch(`${POSTAL_API}/${encodeURIComponent(countryCode)}/${encodeURIComponent(lookupCode)}`, {
       headers: { Accept: "application/json", "User-Agent": "CentralOpsTravel/1.0 (https://cs-onsite-travel.vercel.app)" },
       next: { revalidate: 2_592_000 },
+      signal: AbortSignal.timeout(4_000),
     });
     if (response.status === 404) return NextResponse.json({ match: null });
     if (!response.ok) return NextResponse.json({ message: "Postal code lookup is temporarily unavailable." }, { status: 502 });

@@ -38,6 +38,7 @@ export function normalizePostalCode(value: unknown) {
 
 export function postalLookupCode(countryCode: string, postalCode: string) {
   const compact = postalCode.replace(/\s+/g, "");
+  if (countryCode === "US" && /^\d{5}-\d{4}$/.test(compact)) return compact.slice(0, 5);
   return countryCode === "CA" ? compact.slice(0, 3) : compact;
 }
 

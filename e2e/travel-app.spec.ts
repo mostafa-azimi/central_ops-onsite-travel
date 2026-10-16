@@ -59,6 +59,9 @@ test("ShipHero branding and text remain visible when returning to light mode", a
 });
 
 test("signed-out employee pages remain gated", async ({ page }) => {
+  const mapData = await page.request.get("/api/map-data");
+  expect(mapData.status()).toBe(401);
+  expect(mapData.headers()["cache-control"]).toContain("no-store");
   await page.goto("/map");
   await expect(page.getByRole("heading", { name: "Map view" })).toBeVisible();
   await expect(page.getByText("Sign in with a verified @shiphero.com Google account")).toBeVisible();
@@ -187,11 +190,53 @@ test("administrator can review operational history and Calendar integrity", asyn
 
 test("verified employee can open the map and traveler legend", async ({ page }) => {
   await authenticate(page, "employee");
+  await page.route("**/api/map-data", (route) => route.fulfill({ json: {
+    events: [], travelers: [{ name: "Chris Haun", email: "chris.haun@shiphero.com", color: "#3281fd" }], canAdminister: false,
+  } }));
   await page.goto("/map");
   await expect(page.getByLabel("Interactive customer visit map")).toBeVisible();
   await expect(page.getByLabel("Traveler map colors")).toContainText("Chris Haun");
   await expect(page.getByText("Pinch or scroll over the map to zoom.")).toBeVisible();
   await expectAccessible(page);
+});
+
+test("map renders before data and shows Gabe's ZIP+4 pin before street lookup completes", async ({ page }) => {
+  await authenticate(page, "employee");
+  let releaseData!: () => void;
+  let releaseStreet!: () => void;
+  const dataReady = new Promise<void>((resolve) => { releaseData = resolve; });
+  const streetReady = new Promise<void>((resolve) => { releaseStreet = resolve; });
+  await page.route("**/api/map-data", async (route) => {
+    await dataReady;
+    await route.fulfill({ json: {
+      events: [{ calendarEventId: "zip-test", customer: "Bright Thinker", assignee: "Gabe Hanna", location: "1301 WATERS RIDGE DR, 75057-6022", countryCode: "US", start: "2026-10-21", end: "2026-10-22", allDay: true, participants: [], joined: false }],
+      travelers: [{ name: "Gabe Hanna", email: "gabe.hanna@shiphero.com", color: "#00b8d9" }], canAdminister: false,
+    } });
+  });
+  await page.route("**/api/postal?*", async (route) => {
+    expect(new URL(route.request().url()).searchParams.get("postalCode")).toBe("75057");
+    await route.fulfill({ json: { match: { city: "Lewisville", state: "TX", latitude: 33.0532, longitude: -96.9999 } } });
+  });
+  await page.route("**/api/geocode?*", async (route) => {
+    await streetReady;
+    await route.fulfill({ json: { suggestions: [] } });
+  });
+  try {
+    await page.goto("/map");
+    await expect(page.getByRole("heading", { name: "Loading visits…" })).toBeVisible();
+    await expect(page.locator(".leaflet-control-zoom")).toBeVisible();
+    releaseData();
+    await expect(page.getByLabel("Traveler map colors")).toContainText("Gabe Hanna");
+    await expect(page.locator('.leaflet-marker-icon[title="Bright Thinker: Gabe Hanna"]')).toBeVisible();
+    await expect(page.getByText("Approximate location on map", { exact: true })).toBeVisible();
+    releaseStreet();
+    await page.locator('.leaflet-marker-icon[title="Bright Thinker: Gabe Hanna"]').click();
+    await expect(page.locator(".map-popup")).toContainText("Oct 21, 2026");
+    await expect(page.locator(".map-popup")).toContainText("Approximate location");
+  } finally {
+    releaseData();
+    releaseStreet();
+  }
 });
 
 test("verified employee can explore visits in month and week calendar views", async ({ page }, testInfo) => {
